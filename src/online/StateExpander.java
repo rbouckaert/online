@@ -2,7 +2,6 @@ package online;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -84,6 +83,10 @@ public class StateExpander extends Runnable {
 		List<String> exclusions = new ArrayList<>();
 		List<String> additions = new ArrayList<>();
 		determineInclusionsExclusions(model1, model2, exclusions, additions);
+		if (additions.size() != 1) {
+			throw new IllegalArgumentException("Adding more than 1 taxon is not implemented yet");
+			// TODO: implement adding more than 1 taxon
+		}
 		
 		// remove taxa from model1 that are not in model2
 		removeExclusions(model1.tree.getRoot(), exclusions);
@@ -103,6 +106,8 @@ public class StateExpander extends Runnable {
 			node.setParent(null);
 			node.setID(null);
 		}
+		
+		// TODO: check the numbering of taxa is not upset -- leaf nodes 0...n-1, internal nodes n...2n-2
 		tree2.assignFrom(model1.tree);
 		for (String taxon : additions) {
 			int i = 0; 
@@ -114,15 +119,70 @@ public class StateExpander extends Runnable {
 			Node newRoot = new Node();
 			newRoot.addChild(model2.tree.getRoot());
 			newRoot.addChild(child);
+			newRoot.setHeight(model2.tree.getRoot().getHeight() * (model2.tree.getNodeCount()+1.0)/model2.tree.getNodeCount());
 			model2.tree.setRoot(newRoot);
 		}
 	} // initialiseTree
 
 	private void positionAdditions(Model model2, List<String> additions) {
-		for (String taxon : additions) {
-			// TODO
-		}		
+		// adding a single taxon
+		String taxon = additions.get(0);
+		State state = model2.state;
+		Distribution posterior = model2.posterior;
+		
+		// calc logP when new taxon is outgroup
+        state.storeCalculationNodes();
+        state.checkCalculationNodesDirtiness();
+    	double logP = posterior.calculateLogP();
+		state.acceptCalculationNodes();
+
+		// move node that attaches halfway left and right
+		Node root = model2.tree.getRoot();
+		tryLeftRight(root,
+				root.getLeft().isLeaf() ? root.getRight() : root.getLeft(),
+				state, posterior, model2.tree, logP);
+		
 	} // addAdditions
+
+	private void tryLeftRight(Node internalNode, Node child, State state, Distribution posterior, Tree tree, double logP) {
+		double logPleft = tryBranch(internalNode, child.getLeft(), state, posterior, tree);
+		double logPright = tryBranch(internalNode, child.getRight(), state, posterior, tree);
+		if (logPleft < logP && logPright < logP) {
+			return;
+		}
+		if (logPleft < logPright) {
+			return;
+		}
+		positionOnBranch(internalNode, child.getLeft(), tree);
+	}
+
+	private double tryBranch(Node internalNode, Node node, State state, Distribution posterior, Tree tree) {
+		positionOnBranch(internalNode, node, tree);
+		
+        state.storeCalculationNodes();
+        state.checkCalculationNodesDirtiness();
+    	double logP = posterior.calculateLogP();
+		state.acceptCalculationNodes();
+		return logP;
+	}
+
+	private void positionOnBranch(Node internalNode, Node node, Tree tree) {
+		// remove attachements of internalNode
+		if (internalNode.isRoot()) {
+			Node newRoot = internalNode.getLeft().isLeaf() ? internalNode.getRight() : internalNode.getLeft();
+			tree.setRoot(newRoot);
+		} else {
+			internalNode.getParent().removeChild(internalNode);
+		}
+		internalNode.removeChild(internalNode.getLeft().isLeaf() ? internalNode.getRight() : internalNode.getLeft());
+		
+		// add internalNode above node, halfway along the branch
+		Node parent = node.getParent();
+		parent.removeChild(node);
+		parent.addChild(internalNode);
+		internalNode.addChild(node);
+		internalNode.setHeight((parent.getHeight() + node.getHeight())/2);		
+	}
 
 	protected Node removeExclusions(Node node, List<String> taxaToExclude) {
 		if (node.isLeaf()) {
@@ -184,7 +244,7 @@ public class StateExpander extends Runnable {
 	} // determineInclusionsExclusions
 
 
-	// copy all state-nodes unless they are a tree, or they are parameters with different dimensions (like rates)
+	// copy all state-nodes unless they are a tree, or they are parameters with differenjava -cp AARS.jar:/home/rbou019/.beast/2.6/BEAST/lib/beast.jar beast.app.beastapp.BeastMain -java ClassI_II_protozyme.xmlt dimensions (like rates)
 	private void copyCommonStateNodes(Model model1, Model model2) {
 		State state1 = model1.state; 
 		State state2 = model2.state;
