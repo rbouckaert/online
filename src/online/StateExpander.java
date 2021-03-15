@@ -18,6 +18,7 @@ import beast.core.Runnable;
 import beast.core.parameter.Parameter;
 import beast.core.util.Log;
 import beast.evolution.tree.Node;
+import beast.evolution.tree.TraitSet;
 import beast.evolution.tree.Tree;
 import beast.util.XMLParser;
 import beast.util.XMLParserException;
@@ -109,21 +110,46 @@ public class StateExpander extends Runnable {
 		
 		// TODO: check the numbering of taxa is not upset -- leaf nodes 0...n-1, internal nodes n...2n-2
 		tree2.assignFrom(model1.tree);
-		for (String taxon : additions) {
-			int i = 0; 
-			while (tree2.getNode(i).getID() !=null) {
-				i++;
-			}
-			Node child = tree2.getNode(i);
+		for (int i = 0; i < additions.size(); i++) {
+			String taxon = additions.get(i);
+
+			Node child = new Node();
 			child.setID(taxon);
+			child.setNr(model1.tree.getLeafNodeCount() + i);
+			child.setHeight(0.0);
+			if (tree2.hasDateTrait()) {
+				TraitSet traitSet = tree2.getDateTrait();
+				String pattern = traitSet.getTraitName();
+		        if (pattern.equals(TraitSet.DATE_TRAIT) ||
+		        		pattern.equals(TraitSet.AGE_TRAIT) ||
+		                pattern.equals(TraitSet.DATE_FORWARD_TRAIT) ||
+		                pattern.equals(TraitSet.DATE_BACKWARD_TRAIT)) {
+		        	child.setMetaData(pattern, traitSet.getValue(taxon));
+		        }
+			}
+			
 			Node newRoot = new Node();
 			newRoot.addChild(model2.tree.getRoot());
 			newRoot.addChild(child);
 			newRoot.setHeight(model2.tree.getRoot().getHeight() * (model2.tree.getNodeCount()+1.0)/model2.tree.getNodeCount());
 			model2.tree.setRoot(newRoot);
 		}
+		renumberInternal(tree2.getRoot(), new int[]{model1.tree.getLeafNodeCount() + additions.size()});
+		tree2.initAndValidate();
 	} // initialiseTree
 
+	private int renumberInternal(Node node, int[] nr) {
+		for (Node child : node.getChildren()) {
+			renumberInternal(child, nr);
+		}
+		if (!node.isLeaf()) {
+			node.setNr(nr[0]);
+			nr[0]++;
+		}
+		return nr[0];
+	}
+
+	
 	private void positionAdditions(Model model2, List<String> additions) {
 		// adding a single taxon
 		String taxon = additions.get(0);
@@ -138,26 +164,45 @@ public class StateExpander extends Runnable {
 
 		// move node that attaches halfway left and right
 		Node root = model2.tree.getRoot();
-		tryLeftRight(root,
-				root.getLeft().isLeaf() ? root.getRight() : root.getLeft(),
+		Node newTaxon = model2.tree.getNode(model2.tree.getLeafNodeCount());
+		tryLeftRight(root, newTaxon,
+				root.getLeft() == newTaxon ? root.getRight() : root.getLeft(),
 				state, posterior, model2.tree, logP);
 		
+		
+		
+		
+		Log.warning(model2.tree.getRoot().toNewick());
+
 	} // addAdditions
 
-	private void tryLeftRight(Node internalNode, Node child, State state, Distribution posterior, Tree tree, double logP) {
-		double logPleft = tryBranch(internalNode, child.getLeft(), state, posterior, tree);
-		double logPright = tryBranch(internalNode, child.getRight(), state, posterior, tree);
+	private void tryLeftRight(Node internalNode, Node newTaxon, Node child, State state, Distribution posterior, Tree tree, double logP) {
+		double originalHeigt = internalNode.getHeight();
+		
+		Node left = child.getLeft();
+		Node right = child.getRight();
+		double logPleft = tryBranch(internalNode, newTaxon, left, state, posterior, tree);
+		double logPright = tryBranch(internalNode, newTaxon, right, state, posterior, tree);
 		if (logPleft < logP && logPright < logP) {
+			// TODO: restore internalNode above child
+			positionOnBranch(internalNode, newTaxon, child, tree);
+			internalNode.setHeight(originalHeigt);
 			return;
 		}
 		if (logPleft < logPright) {
+			if (!right.isLeaf()) {
+				tryLeftRight(internalNode, newTaxon, right, state, posterior, tree, logPright);
+			}
 			return;
 		}
-		positionOnBranch(internalNode, child.getLeft(), tree);
+		positionOnBranch(internalNode, newTaxon, child.getLeft(), tree);
+		if (!left.isLeaf()) {
+			tryLeftRight(internalNode, newTaxon, left, state, posterior, tree, logPleft);
+		}
 	}
 
-	private double tryBranch(Node internalNode, Node node, State state, Distribution posterior, Tree tree) {
-		positionOnBranch(internalNode, node, tree);
+	private double tryBranch(Node internalNode, Node newTaxon, Node node, State state, Distribution posterior, Tree tree) {
+		positionOnBranch(internalNode, newTaxon, node, tree);
 		
         state.storeCalculationNodes();
         state.checkCalculationNodesDirtiness();
@@ -166,22 +211,27 @@ public class StateExpander extends Runnable {
 		return logP;
 	}
 
-	private void positionOnBranch(Node internalNode, Node node, Tree tree) {
-		// remove attachements of internalNode
+	private void positionOnBranch(Node internalNode, Node newTaxon, Node node, Tree tree) {
+		// remove attachments of internalNode
 		if (internalNode.isRoot()) {
-			Node newRoot = internalNode.getLeft().isLeaf() ? internalNode.getRight() : internalNode.getLeft();
+			Node newRoot = internalNode.getLeft() == newTaxon ? internalNode.getRight() : internalNode.getLeft();
 			tree.setRoot(newRoot);
 		} else {
 			internalNode.getParent().removeChild(internalNode);
+			internalNode.getParent().addChild(internalNode.getLeft() == newTaxon ? internalNode.getRight() : internalNode.getLeft());
 		}
-		internalNode.removeChild(internalNode.getLeft().isLeaf() ? internalNode.getRight() : internalNode.getLeft());
+		internalNode.removeChild(internalNode.getLeft() == newTaxon ? internalNode.getRight() : internalNode.getLeft());
 		
 		// add internalNode above node, halfway along the branch
 		Node parent = node.getParent();
-		parent.removeChild(node);
-		parent.addChild(internalNode);
+		if (parent == null) {
+			tree.setRoot(internalNode);
+		} else {
+			parent.removeChild(node);
+			parent.addChild(internalNode);
+			internalNode.setHeight((parent.getHeight() + node.getHeight())/2);		
+		}
 		internalNode.addChild(node);
-		internalNode.setHeight((parent.getHeight() + node.getHeight())/2);		
 	}
 
 	protected Node removeExclusions(Node node, List<String> taxaToExclude) {
@@ -295,7 +345,7 @@ public class StateExpander extends Runnable {
 			}
 		}
 		model.posterior = (Distribution) runnable.getInputValue("distribution");
-		model.operatorSchedule = (OperatorSchedule) runnable.getInputValue("operatorSchedule");
+		model.operatorSchedule = (OperatorSchedule) runnable.getInputValue("operatorschedule");
 		if (model.operatorSchedule == null && runnable instanceof MCMC) {
 			model.operatorSchedule = ((MCMC) runnable).getOperatorSchedule();
 		}
