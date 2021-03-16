@@ -48,6 +48,8 @@ public class StateExpander extends Runnable {
 
 	@Override
 	public void run() throws Exception {
+		Log.setLevel(Log.Level.debug);
+		
 		// import models
 		Model model1 = getModelFromFile(xml1Input.get());
 		Model model2 = getModelFromFile(xml2Input.get());
@@ -61,12 +63,12 @@ public class StateExpander extends Runnable {
 		updateState(model1, model2);
 		
 		exportStateFile(model2.state, model1.operatorSchedule);
-		Log.warning("Done!");
+		Log.debug("Done!");
 	}
 
 	private void exportStateFile(State state, OperatorSchedule operatorSchedule) throws IOException {
 		String stateFileName = xml2Input.get().getAbsolutePath() + ".state";
-		Log.warning("Writing state file to " + stateFileName);
+		Log.debug("Writing state file to " + stateFileName);
 		
 		state.setStateFileName(stateFileName);
 		state.storeToFile(0);
@@ -151,10 +153,14 @@ public class StateExpander extends Runnable {
 		// tree2.initAndValidate();
 	} // initialiseTree
 
+	/** changes root of tree in such a way that the original root
+	 * node remains root node, swapping nodes if required
+	 */
 	private void setRoot(Tree tree, Node newRoot) {
 		if (tree.getRoot() == newRoot) {
 			return;
 		}
+		// swap root nodes
 		Node oldRoot = tree.getRoot();
 		List<Node> children = new ArrayList<>();
 		children.addAll(oldRoot.getChildren());
@@ -200,7 +206,7 @@ public class StateExpander extends Runnable {
 			nr[0]++;
 		} else { // node is leaf
 			if (node.getNr() != map.get(node.getID())) {
-				System.out.println(node.getID() + " " + node.getNr()+" => " + map.get(node.getID()));
+				Log.debug(node.getID() + " " + node.getNr()+" => " + map.get(node.getID()));
 				node.setNr(map.get(node.getID()));
 			}
 		}
@@ -220,7 +226,7 @@ public class StateExpander extends Runnable {
         state.checkCalculationNodesDirtiness();
     	double logP = posterior.calculateLogP();
 		state.acceptCalculationNodes();
-Log.warning("[" + logP + "] " + model2.tree.getRoot().toNewick());		
+Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());		
 
 		// move node that attaches halfway left and right
 		int nodeNr = map.get(taxon);
@@ -235,7 +241,7 @@ Log.warning("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		
 		
 		
-		Log.warning(model2.tree.getRoot().toNewick());
+		Log.debug(model2.tree.getRoot().toNewick());
 
 	} // addAdditions
 
@@ -248,8 +254,9 @@ Log.warning("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		double logPright = tryBranch(newTaxon, right, state, posterior, tree);
 		if (logPleft < logP && logPright < logP) {
 			// restore internalNode above child
+			child = internalNode.getParent();
 			positionOnBranch(newTaxon, child, tree);
-			internalNode.setHeight(originalHeigt);
+			newTaxon.getParent().setHeight(originalHeigt);
 			return;
 		}
 		if (logPleft < logPright) {
@@ -274,7 +281,7 @@ Log.warning("[" + logP + "] " + model2.tree.getRoot().toNewick());
         state.checkCalculationNodesDirtiness();
     	double logP = posterior.calculateLogP();
 		state.acceptCalculationNodes();
-Log.warning("[" + logP + "] " + tree.getRoot().toNewick());		
+Log.debug("[" + logP + "] " + tree.getRoot().toNewick());		
 		return logP;
 	}
 
@@ -296,7 +303,8 @@ Log.warning("[" + logP + "] " + tree.getRoot().toNewick());
 		// add internalNode above node, halfway along the branch
 		Node parent = node.getParent();
 		if (parent == null) {
-			setRoot(tree, internalNode);
+			newRoot = internalNode;
+			// setRoot(tree, internalNode);
 		} else {
 			parent.removeChild(node);
 			parent.addChild(internalNode);

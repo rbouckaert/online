@@ -1,0 +1,16 @@
+<itsabeastystatewerein version='2.0' sample='1000000'>
+<statenode id='Tree.t:dna'>((((0:0.09368037848522472,5:0.09368037848522472)12:0.0668817399220062,3:0.16056211840723092)11:0.060455416052442895,1:0.22101753445967381)10:0.024426513313755893,(((2:0.09209699713961747,8:0.09209699713961747)9:0.05542727932966324,(6:0.09241943138219244,7:0.09241943138219244)15:0.05510484508708827)14:0.05595530036201565,4:0.20347957683129636)13:0.04196447094213335)16:0.0</statenode>
+<statenode id='birthRate.t:dna'>birthRate.t:dna[1 1] (-Infinity,Infinity): 4.814436496209858 </statenode>
+</itsabeastystatewerein>
+<!--
+{"operators":[
+{"id":"YuleBirthRateScaler.t:dna","p":0.5,"accept":22352,"reject":17755,"acceptFC":0,"rejectFC":0,"rejectIv":7992,"rejectOp":0},
+{"id":"YuleModelTreeScaler.t:dna","p":0.9,"accept":18928,"reject":21092,"acceptFC":0,"rejectFC":0,"rejectIv":0,"rejectOp":0},
+{"id":"YuleModelTreeRootScaler.t:dna","p":0.9,"accept":16902,"reject":23295,"acceptFC":0,"rejectFC":0,"rejectIv":2903,"rejectOp":2903},
+{"id":"YuleModelUniformOperator.t:dna","p":"NaN","accept":97793,"reject":301885,"acceptFC":0,"rejectFC":0,"rejectIv":0,"rejectOp":0},
+{"id":"YuleModelSubtreeSlide.t:dna","p":0.1,"accept":20562,"reject":180469,"acceptFC":0,"rejectFC":0,"rejectIv":41061,"rejectOp":41061},
+{"id":"YuleModelNarrow.t:dna","p":"NaN","accept":1747,"reject":197298,"acceptFC":0,"rejectFC":0,"rejectIv":0,"rejectOp":0},
+{"id":"YuleModelWide.t:dna","p":"NaN","accept":27,"reject":39836,"acceptFC":0,"rejectFC":0,"rejectIv":21284,"rejectOp":21284},
+{"id":"YuleModelWilsonBalding.t:dna","p":"NaN","accept":10,"reject":40050,"acceptFC":0,"rejectFC":0,"rejectIv":13458,"rejectOp":13458}
+]}
+-->
