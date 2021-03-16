@@ -84,23 +84,23 @@ public class StateExpander extends Runnable {
 		List<String> exclusions = new ArrayList<>();
 		List<String> additions = new ArrayList<>();
 		determineInclusionsExclusions(model1, model2, exclusions, additions);
-		if (additions.size() != 1) {
-			throw new IllegalArgumentException("Adding more than 1 taxon is not implemented yet");
-			// TODO: implement adding more than 1 taxon
-		}
 		
 		// remove taxa from model1 that are not in model2
 		removeExclusions(model1.tree.getRoot(), exclusions);
 		
 		// initialise tree of model2 with taxa from model1
-		initialiseTree(model1, model2, additions);
+		int leafNodeCount = model2.tree.getLeafNodeCount();
+		initialiseTree(model1, model2);
 		
 		// position additional taxa at locations with high support
-		positionAdditions(model2, additions);
+		for (String taxon : additions) {
+			addTaxon(model2, taxon, leafNodeCount);
+			positionAdditions(model2, taxon);
+		}
 	} // updateState
 		
 
-	private void initialiseTree(Model model1, Model model2, List<String> additions) {
+	private void initialiseTree(Model model1, Model model2) {
 		Tree tree2 = model2.tree;
 		
 		// map is used to check the numbering of taxa is not upset -- leaf nodes 0...n-1, internal nodes n...2n-2
@@ -112,42 +112,88 @@ public class StateExpander extends Runnable {
 		for (Node node : tree2.getNodesAsArray()) {
 			node.removeAllChildren(false);
 			node.setParent(null);
-			node.setID(null);
+			// node.setID(null);
 		}
 		
-		tree2.assignFrom(model1.tree);
-		
-		for (int i = 0; i < additions.size(); i++) {
-			String taxon = additions.get(i);
+        final Tree otherTree = (Tree) model1.tree;
+        Node root = tree2.getRoot();
+        root.assignFrom(tree2.getNodesAsArray(), otherTree.getRoot());
+        root.setParent(null);
+    }
 
-			Node child = new Node();
-			child.setID(taxon);
-			child.setNr(map.get(taxon));
-			child.setHeight(0.0);
-			if (tree2.hasDateTrait()) {
-				TraitSet traitSet = tree2.getDateTrait();
-				String pattern = traitSet.getTraitName();
-		        if (pattern.equals(TraitSet.DATE_TRAIT) ||
-		        		pattern.equals(TraitSet.AGE_TRAIT) ||
-		                pattern.equals(TraitSet.DATE_FORWARD_TRAIT) ||
-		                pattern.equals(TraitSet.DATE_BACKWARD_TRAIT)) {
-		        	child.setMetaData(pattern, traitSet.getValue(taxon));
-		        }
-			}
-			
-			Node newRoot = new Node();
-			newRoot.addChild(model2.tree.getRoot());
-			newRoot.addChild(child);
-			newRoot.setHeight(model2.tree.getRoot().getHeight() * (model2.tree.getNodeCount()+1.0)/model2.tree.getNodeCount());
-			model2.tree.setRoot(newRoot);
+	
+	private void addTaxon(Model model2, String taxon, int leafNodeCount) {
+		Tree tree2 = model2.tree;
+
+
+		Node child = new Node();
+		child.setID(taxon);
+		child.setNr(map.get(taxon));
+		child.setHeight(0.0);
+		if (tree2.hasDateTrait()) {
+			TraitSet traitSet = tree2.getDateTrait();
+			String pattern = traitSet.getTraitName();
+	        if (pattern.equals(TraitSet.DATE_TRAIT) ||
+	        		pattern.equals(TraitSet.AGE_TRAIT) ||
+	                pattern.equals(TraitSet.DATE_FORWARD_TRAIT) ||
+	                pattern.equals(TraitSet.DATE_BACKWARD_TRAIT)) {
+	        	child.setMetaData(pattern, traitSet.getValue(taxon));
+	        }
 		}
-		renumberInternal(tree2.getRoot(), map, new int[]{model1.tree.getLeafNodeCount() + additions.size()});
-		tree2.initAndValidate();
+		
+		Node newRoot = new Node();
+		newRoot.addChild(model2.tree.getRoot());
+		newRoot.addChild(child);
+		newRoot.setHeight(model2.tree.getRoot().getHeight() * (model2.tree.getNodeCount()+1.0)/model2.tree.getNodeCount());
+		setRoot(model2.tree, newRoot);
+
+		renumberInternal(tree2.getRoot(), tree2.getNodesAsArray(), map, new int[]{leafNodeCount});
+		// tree2.initAndValidate();
 	} // initialiseTree
 
-	private int renumberInternal(Node node, Map<String, Integer> map, int[] nr) {
+	private void setRoot(Tree tree, Node newRoot) {
+		if (tree.getRoot() == newRoot) {
+			return;
+		}
+		Node oldRoot = tree.getRoot();
+		List<Node> children = new ArrayList<>();
+		children.addAll(oldRoot.getChildren());
+
+		List<Node> children2 = new ArrayList<>();
+		children2.addAll(newRoot.getChildren());
+		Node parent = oldRoot.getParent();		
+		
+		oldRoot.removeAllChildren(false);
+		parent.removeChild(oldRoot);
+		newRoot.removeAllChildren(false);
+
+		for (Node child : children) {
+			if (child != newRoot) { 
+				newRoot.addChild(child);
+			} else {
+				throw new IllegalArgumentException("Don't know how to handle this");
+			}
+		}
+		if (parent != newRoot) {
+			parent.addChild(newRoot);
+		}
+		for (Node child : children2) {
+			if (child != oldRoot) { 
+				oldRoot.addChild(child);
+			} else {
+				oldRoot.addChild(newRoot);
+			}
+		}
+		oldRoot.setParent(null);
+		
+		double tmp = newRoot.getHeight();
+		newRoot.setHeight(oldRoot.getHeight());
+		oldRoot.setHeight(tmp);
+	}
+
+	private int renumberInternal(Node node, Node [] nodes, Map<String, Integer> map, int[] nr) {
 		for (Node child : node.getChildren()) {
-			renumberInternal(child, map, nr);
+			renumberInternal(child, nodes, map, nr);
 		}
 		if (!node.isLeaf()) {
 			node.setNr(nr[0]);
@@ -158,13 +204,14 @@ public class StateExpander extends Runnable {
 				node.setNr(map.get(node.getID()));
 			}
 		}
+		nodes[node.getNr()] = node;
 		return nr[0];
 	}
 
+	Node internalNode;
 	
-	private void positionAdditions(Model model2, List<String> additions) {
+	private void positionAdditions(Model model2, String taxon) {
 		// adding a single taxon
-		String taxon = additions.get(0);
 		State state = model2.state;
 		Distribution posterior = model2.posterior;
 		
@@ -176,11 +223,12 @@ public class StateExpander extends Runnable {
 Log.warning("[" + logP + "] " + model2.tree.getRoot().toNewick());		
 
 		// move node that attaches halfway left and right
-		Node root = model2.tree.getRoot();
 		int nodeNr = map.get(taxon);
 		Node newTaxon = model2.tree.getNode(nodeNr);
+		Node root = model2.tree.getRoot();
+		internalNode = root;
 		// Node newTaxon = model2.tree.getNode(model2.tree.getLeafNodeCount());
-		tryLeftRight(root, newTaxon,
+		tryLeftRight(newTaxon,
 				root.getLeft() == newTaxon ? root.getRight() : root.getLeft(),
 				state, posterior, model2.tree, logP);
 		
@@ -191,35 +239,35 @@ Log.warning("[" + logP + "] " + model2.tree.getRoot().toNewick());
 
 	} // addAdditions
 
-	private void tryLeftRight(Node internalNode, Node newTaxon, Node child, State state, Distribution posterior, Tree tree, double logP) {
+	private void tryLeftRight(Node newTaxon, Node child, State state, Distribution posterior, Tree tree, double logP) {
 		double originalHeigt = internalNode.getHeight();
 		
 		Node left = child.getLeft();
 		Node right = child.getRight();
-		double logPleft = tryBranch(internalNode, newTaxon, left, state, posterior, tree);
-		double logPright = tryBranch(internalNode, newTaxon, right, state, posterior, tree);
+		double logPleft = tryBranch(newTaxon, left, state, posterior, tree);
+		double logPright = tryBranch(newTaxon, right, state, posterior, tree);
 		if (logPleft < logP && logPright < logP) {
 			// restore internalNode above child
-			positionOnBranch(internalNode, newTaxon, child, tree);
+			positionOnBranch(newTaxon, child, tree);
 			internalNode.setHeight(originalHeigt);
 			return;
 		}
 		if (logPleft < logPright) {
 			if (!right.isLeaf()) {
-				tryLeftRight(internalNode, newTaxon, right, state, posterior, tree, logPright);
+				tryLeftRight(newTaxon, right, state, posterior, tree, logPright);
 			}
 			return;
 		}
-		positionOnBranch(internalNode, newTaxon, child.getLeft(), tree);
+		positionOnBranch(newTaxon, left, tree);
 		if (!left.isLeaf()) {
-			tryLeftRight(internalNode, newTaxon, left, state, posterior, tree, logPleft);
+			tryLeftRight(newTaxon, left, state, posterior, tree, logPleft);
 		}
 	}
 
-	private double tryBranch(Node internalNode, Node newTaxon, Node node, State state, Distribution posterior, Tree tree) {
+	private double tryBranch(Node newTaxon, Node node, State state, Distribution posterior, Tree tree) {
 
         state.storeCalculationNodes();
-        positionOnBranch(internalNode, newTaxon, node, tree);
+        positionOnBranch(newTaxon, node, tree);
         
 //        state.store(-1);
 //        state.setEverythingDirty(true);
@@ -230,11 +278,11 @@ Log.warning("[" + logP + "] " + tree.getRoot().toNewick());
 		return logP;
 	}
 
-	private void positionOnBranch(Node internalNode, Node newTaxon, Node node, Tree tree) {
+	private void positionOnBranch(Node newTaxon, Node node, Tree tree) {
 		// remove attachments of internalNode
+		Node newRoot = null;
 		if (internalNode.isRoot()) {
-			Node newRoot = internalNode.getLeft() == newTaxon ? internalNode.getRight() : internalNode.getLeft();
-			tree.setRoot(newRoot);
+			newRoot = internalNode.getLeft() == newTaxon ? internalNode.getRight() : internalNode.getLeft();
 			if (newRoot.getParent() != null) {
 				newRoot.getParent().removeChild(newRoot);
 			}
@@ -248,13 +296,17 @@ Log.warning("[" + logP + "] " + tree.getRoot().toNewick());
 		// add internalNode above node, halfway along the branch
 		Node parent = node.getParent();
 		if (parent == null) {
-			tree.setRoot(internalNode);
+			setRoot(tree, internalNode);
 		} else {
 			parent.removeChild(node);
 			parent.addChild(internalNode);
 			internalNode.setHeight((parent.getHeight() + node.getHeight())/2);		
 		}
 		internalNode.addChild(node);
+		if (newRoot != null) {
+			setRoot(tree, newRoot);
+			internalNode = newRoot;
+		}
 	}
 
 	protected Node removeExclusions(Node node, List<String> taxaToExclude) {
