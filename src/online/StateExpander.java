@@ -2,10 +2,7 @@ package online;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 import javax.xml.parsers.ParserConfigurationException;
 
@@ -16,6 +13,7 @@ import beast.app.util.XMLFile;
 import beast.core.*;
 import beast.core.Runnable;
 import beast.core.parameter.Parameter;
+import beast.core.util.CompoundDistribution;
 import beast.core.util.Log;
 import beast.evolution.tree.Node;
 import beast.evolution.tree.TraitSet;
@@ -28,6 +26,8 @@ public class StateExpander extends Runnable {
 	final public Input<XMLFile> xml1Input = new Input<>("xml1", "BEAST XML file with initial state", new XMLFile("[[none]]"));
 	final public Input<File> stateInput = new Input<>("state", "state file associated with initial XML file (xml1)", new File("[[none]]"));
 	final public Input<XMLFile> xml2Input = new Input<>("xml2", "BEAST XML file with expanded state", new XMLFile("[[none]]"));
+
+	Map<String, Integer> map;
 
 	/** container of bits relevant to updating the state of models **/
 	class Model {
@@ -102,20 +102,27 @@ public class StateExpander extends Runnable {
 
 	private void initialiseTree(Model model1, Model model2, List<String> additions) {
 		Tree tree2 = model2.tree;
+		
+		// map is used to check the numbering of taxa is not upset -- leaf nodes 0...n-1, internal nodes n...2n-2
+		map = new HashMap<>();
+		for (int i = 0; i < tree2.getLeafNodeCount(); i++) {
+			map.put(tree2.getNode(i).getID(), i);
+		}
+		
 		for (Node node : tree2.getNodesAsArray()) {
 			node.removeAllChildren(false);
 			node.setParent(null);
 			node.setID(null);
 		}
 		
-		// TODO: check the numbering of taxa is not upset -- leaf nodes 0...n-1, internal nodes n...2n-2
 		tree2.assignFrom(model1.tree);
+		
 		for (int i = 0; i < additions.size(); i++) {
 			String taxon = additions.get(i);
 
 			Node child = new Node();
 			child.setID(taxon);
-			child.setNr(model1.tree.getLeafNodeCount() + i);
+			child.setNr(map.get(taxon));
 			child.setHeight(0.0);
 			if (tree2.hasDateTrait()) {
 				TraitSet traitSet = tree2.getDateTrait();
@@ -134,17 +141,22 @@ public class StateExpander extends Runnable {
 			newRoot.setHeight(model2.tree.getRoot().getHeight() * (model2.tree.getNodeCount()+1.0)/model2.tree.getNodeCount());
 			model2.tree.setRoot(newRoot);
 		}
-		renumberInternal(tree2.getRoot(), new int[]{model1.tree.getLeafNodeCount() + additions.size()});
+		renumberInternal(tree2.getRoot(), map, new int[]{model1.tree.getLeafNodeCount() + additions.size()});
 		tree2.initAndValidate();
 	} // initialiseTree
 
-	private int renumberInternal(Node node, int[] nr) {
+	private int renumberInternal(Node node, Map<String, Integer> map, int[] nr) {
 		for (Node child : node.getChildren()) {
-			renumberInternal(child, nr);
+			renumberInternal(child, map, nr);
 		}
 		if (!node.isLeaf()) {
 			node.setNr(nr[0]);
 			nr[0]++;
+		} else { // node is leaf
+			if (node.getNr() != map.get(node.getID())) {
+				System.out.println(node.getID() + " " + node.getNr()+" => " + map.get(node.getID()));
+				node.setNr(map.get(node.getID()));
+			}
 		}
 		return nr[0];
 	}
@@ -161,10 +173,13 @@ public class StateExpander extends Runnable {
         state.checkCalculationNodesDirtiness();
     	double logP = posterior.calculateLogP();
 		state.acceptCalculationNodes();
+Log.warning("[" + logP + "] " + model2.tree.getRoot().toNewick());		
 
 		// move node that attaches halfway left and right
 		Node root = model2.tree.getRoot();
-		Node newTaxon = model2.tree.getNode(model2.tree.getLeafNodeCount());
+		int nodeNr = map.get(taxon);
+		Node newTaxon = model2.tree.getNode(nodeNr);
+		// Node newTaxon = model2.tree.getNode(model2.tree.getLeafNodeCount());
 		tryLeftRight(root, newTaxon,
 				root.getLeft() == newTaxon ? root.getRight() : root.getLeft(),
 				state, posterior, model2.tree, logP);
@@ -184,7 +199,7 @@ public class StateExpander extends Runnable {
 		double logPleft = tryBranch(internalNode, newTaxon, left, state, posterior, tree);
 		double logPright = tryBranch(internalNode, newTaxon, right, state, posterior, tree);
 		if (logPleft < logP && logPright < logP) {
-			// TODO: restore internalNode above child
+			// restore internalNode above child
 			positionOnBranch(internalNode, newTaxon, child, tree);
 			internalNode.setHeight(originalHeigt);
 			return;
@@ -202,12 +217,16 @@ public class StateExpander extends Runnable {
 	}
 
 	private double tryBranch(Node internalNode, Node newTaxon, Node node, State state, Distribution posterior, Tree tree) {
-		positionOnBranch(internalNode, newTaxon, node, tree);
-		
+
         state.storeCalculationNodes();
+        positionOnBranch(internalNode, newTaxon, node, tree);
+        
+//        state.store(-1);
+//        state.setEverythingDirty(true);
         state.checkCalculationNodesDirtiness();
     	double logP = posterior.calculateLogP();
 		state.acceptCalculationNodes();
+Log.warning("[" + logP + "] " + tree.getRoot().toNewick());		
 		return logP;
 	}
 
@@ -216,6 +235,10 @@ public class StateExpander extends Runnable {
 		if (internalNode.isRoot()) {
 			Node newRoot = internalNode.getLeft() == newTaxon ? internalNode.getRight() : internalNode.getLeft();
 			tree.setRoot(newRoot);
+			if (newRoot.getParent() != null) {
+				newRoot.getParent().removeChild(newRoot);
+			}
+			newRoot.setParent(null);
 		} else {
 			internalNode.getParent().removeChild(internalNode);
 			internalNode.getParent().addChild(internalNode.getLeft() == newTaxon ? internalNode.getRight() : internalNode.getLeft());
@@ -345,6 +368,11 @@ public class StateExpander extends Runnable {
 			}
 		}
 		model.posterior = (Distribution) runnable.getInputValue("distribution");
+		
+		// TODO: remove next 2 debug lines
+		model.posterior = ((CompoundDistribution) model.posterior).pDistributions.get().get(1);
+		model.posterior = ((CompoundDistribution) model.posterior).pDistributions.get().get(0);
+
 		model.operatorSchedule = (OperatorSchedule) runnable.getInputValue("operatorschedule");
 		if (model.operatorSchedule == null && runnable instanceof MCMC) {
 			model.operatorSchedule = ((MCMC) runnable).getOperatorSchedule();
