@@ -1,0 +1,248 @@
+/*
+* File Exchange.java
+*
+* Copyright (C) 2010 Remco Bouckaert remco@cs.auckland.ac.nz
+*
+* This file is part of BEAST2.
+* See the NOTICE file distributed with this work for additional
+* information regarding copyright ownership and licensing.
+*
+* BEAST is free software; you can redistribute it and/or modify
+* it under the terms of the GNU Lesser General Public License as
+* published by the Free Software Foundation; either version 2
+* of the License, or (at your option) any later version.
+*
+*  BEAST is distributed in the hope that it will be useful,
+*  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*  GNU Lesser General Public License for more details.
+*
+* You should have received a copy of the GNU Lesser General Public
+* License along with BEAST; if not, write to the
+* Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
+* Boston, MA  02110-1301  USA
+*/
+/*
+ * ExchangeOperator.java
+ *
+ * Copyright (C) 2002-2006 Alexei Drummond and Andrew Rambaut
+ *
+ * This file is part of BEAST.
+ * See the NOTICE file distributed with this work for additional
+ * information regarding copyright ownership and licensing.
+ *
+ * BEAST is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ *  BEAST is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with BEAST; if not, write to the
+ * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
+ * Boston, MA  02110-1301  USA
+ */
+
+package online;
+
+import beast.core.Description;
+import beast.core.Input;
+import beast.evolution.operators.TreeOperator;
+import beast.evolution.tree.Node;
+import beast.evolution.tree.Tree;
+import beast.evolution.tree.TreeInterface;
+import beast.util.Randomizer;
+
+
+/*
+ * KNOWN BUGS: WIDE operator cannot be used on trees with 4 or less tips!
+ */
+
+@Description("Implements branch exchange operations. There is a NARROW and WIDE variety. " +
+        "The narrow exchange is very similar to a rooted-beast.tree nearest-neighbour " +
+        "interchange but with the restriction that node height must remain consistent.")
+public class ExchangeOnPartition extends TreeOperator {
+    final public Input<Boolean> isNarrowInput = new Input<>("isNarrow", "if true (default) a narrow exchange is performed, otherwise a wide exchange", true);
+	final public Input<TreePartition> partitionInput = new Input<>("partition", "specifies part of the tree to be operated on");
+
+	TreePartition partition;
+
+    public ExchangeOnPartition(TreeInterface tree, TreePartition partition, double weight) {
+		initByName("tree", tree, "partition", partition, "weight", weight);
+	}
+
+	@Override
+    public void initAndValidate() {
+    	partition = partitionInput.get();
+    }
+
+    /**
+     * override this for proposals,
+     *
+     * @return log of Hastings Ratio, or Double.NEGATIVE_INFINITY if proposal should not be accepted *
+     */
+    @Override
+    public double proposal() {
+        final Tree tree = treeInput.get(this);
+
+        double logHastingsRatio = 0;
+
+        if (isNarrowInput.get()) {
+            logHastingsRatio = narrow(tree);
+        } else {
+            logHastingsRatio = wide(tree);
+        }
+
+        return logHastingsRatio;
+    }
+    
+    Node i, uncle, parentIndex, grandParent;
+
+    @Override
+    public void reject(int reason) {
+    	super.reject(reason);
+    	if (i != null) {
+    		// System.out.println("[pre-reject]" + treeInput.get().getRoot().toNewick());    	
+            exchangeNodes(uncle, i, parentIndex, grandParent);
+            // System.out.println("[post-reject]" + treeInput.get().getRoot().toNewick());    	
+    	}
+    }
+
+
+    private int isg(final Node n) {
+      return (n.getLeft().isLeaf() && n.getRight().isLeaf()) ? 0 : 1;
+    }
+
+    private int sisg(final Node n) {
+        return n.isLeaf() ? 0 : isg(n);
+    }
+
+    /**
+     * WARNING: Assumes strictly bifurcating beast.tree.
+     */
+    public double narrow(final Tree tree) {
+    	this.i = null;
+// System.out.println("[pre-proposal]"+tree.getRoot().toNewick());    	
+
+        final int internalNodes = tree.getInternalNodeCount();
+        if (internalNodes <= 1) {
+            return Double.NEGATIVE_INFINITY;
+        }
+
+        Node grandParent = tree.getNode(partition.getRandomNode());
+        int attempt = 0;
+        while (grandParent.isLeaf() || grandParent.getLeft().isLeaf() && grandParent.getRight().isLeaf()) {
+            grandParent = tree.getNode(partition.getRandomNode());
+            attempt++;
+            if (attempt > 100) {
+            	return Double.NEGATIVE_INFINITY;
+            }
+        }
+
+        Node parentIndex = grandParent.getLeft();
+        Node uncle = grandParent.getRight();
+        if (parentIndex.getHeight() < uncle.getHeight()) {
+            parentIndex = grandParent.getRight();
+            uncle = grandParent.getLeft();
+        }
+
+        if( parentIndex.isLeaf() ) {
+            // tree with dated tips
+            return Double.NEGATIVE_INFINITY;
+        }
+
+        int validGP = 0;
+        {
+            for(int i = internalNodes + 1; i < 1 + 2*internalNodes; ++i) {
+                validGP += isg(tree.getNode(i));
+            }
+        }
+
+        final int c2 = sisg(parentIndex) + sisg(uncle);
+
+        final Node i = (Randomizer.nextBoolean() ? parentIndex.getLeft() : parentIndex.getRight());
+        exchangeNodes(i, uncle, parentIndex, grandParent);
+
+        this.i = i;
+        this.uncle = uncle;
+        this.parentIndex = parentIndex;
+        this.grandParent = grandParent;
+
+        final int validGPafter = validGP - c2 + sisg(parentIndex) + sisg(uncle);
+//if (tree.getRoot().getLeafNodeCount() != 9) {
+//	int h = 3;
+//	h++;
+//}
+// System.out.println("[post-proposal]"+tree.getRoot().toNewick());    	
+
+        return Math.log((float)validGP/validGPafter);
+    }
+
+
+    /**
+     * WARNING: Assumes strictly bifurcating beast.tree.
+     * @param tree
+     */
+    public double wide(final Tree tree) {
+
+        final int nodeCount = tree.getNodeCount();
+
+        Node i = tree.getRoot();
+
+        while (i.isRoot()) {
+            i = tree.getNode(partition.getRandomNode());
+        }
+
+        Node j = i;
+        while (j.getNr() == i.getNr() || j.isRoot()) {
+            j = tree.getNode(partition.getRandomNode());
+        }
+
+        final Node p = i.getParent();
+        final Node jP = j.getParent();
+
+        if ((p != jP) && (i != jP) && (j != p)
+                && (j.getHeight() < p.getHeight())
+                && (i.getHeight() < jP.getHeight())) {
+            exchangeNodes(i, j, p, jP);
+
+            // All the nodes on the path from i/j to the common ancestor of i/j parents had a topology change,
+            // so they need to be marked FILTHY.
+            if( markCladesInput.get() ) {
+                Node iup = p;
+                Node jup = jP;
+                while (iup != jup) {
+                    if( iup.getHeight() < jup.getHeight() ) {
+                        assert !iup.isRoot();
+                        iup = iup.getParent();
+                        iup.makeDirty(Tree.IS_FILTHY);
+                    } else {
+                        assert !jup.isRoot();
+                        jup = jup.getParent();
+                        jup.makeDirty(Tree.IS_FILTHY);
+                    }
+                }
+            }
+            return 0;
+        }
+
+        // Randomly selected nodes i and j are not valid candidates for a wide exchange.
+        // reject instead of counting (like we do for narrow).
+        return Double.NEGATIVE_INFINITY;
+    }
+
+
+    /* exchange sub-trees whose root are i and j */
+
+    protected void exchangeNodes(Node i, Node j,
+                                 Node p, Node jP) {
+        // precondition p -> i & jP -> j
+        replace(p, i, j);
+        replace(jP, j, i);
+        // postcondition p -> j & p -> i
+    }
+}
