@@ -12,12 +12,14 @@ import beast.app.util.Application;
 import beast.app.util.XMLFile;
 import beast.core.*;
 import beast.core.Runnable;
+import beast.core.parameter.IntegerParameter;
 import beast.core.parameter.Parameter;
-import beast.core.util.CompoundDistribution;
+import beast.core.util.Evaluator;
 import beast.core.util.Log;
 import beast.evolution.tree.Node;
 import beast.evolution.tree.TraitSet;
 import beast.evolution.tree.Tree;
+import beast.util.Randomizer;
 import beast.util.XMLParser;
 import beast.util.XMLParserException;
 
@@ -26,8 +28,13 @@ public class StateExpander extends Runnable {
 	final public Input<XMLFile> xml1Input = new Input<>("xml1", "BEAST XML file with initial state", new XMLFile("[[none]]"));
 	final public Input<File> stateInput = new Input<>("state", "state file associated with initial XML file (xml1)", new File("[[none]]"));
 	final public Input<XMLFile> xml2Input = new Input<>("xml2", "BEAST XML file with expanded state", new XMLFile("[[none]]"));
+	
+	final public Input<Long> chainLengthInput = new Input<>("chainLength", "Length of the MCMC chain used after placement of taxa", 1000L);
+	final public Input<Long> seedInput = new Input<>("seed", "Specify a random number generator seed");
+
 
 	Map<String, Integer> map;
+	Tree tree;
 
 	/** container of bits relevant to updating the state of models **/
 	class Model {
@@ -36,6 +43,7 @@ public class StateExpander extends Runnable {
 		List<Parameter<?>> parameters;
 		Distribution posterior;
 		OperatorSchedule operatorSchedule;
+		MCMC mcmc;
 		
 		Model() {
 			parameters = new ArrayList<>();
@@ -49,7 +57,10 @@ public class StateExpander extends Runnable {
 	@Override
 	public void run() throws Exception {
 		Log.setLevel(Log.Level.debug);
-		
+		if (seedInput.get() != null) {
+			Randomizer.setSeed(seedInput.get());
+		}
+
 		// import models
 		Model model1 = getModelFromFile(xml1Input.get());
 		Model model2 = getModelFromFile(xml2Input.get());
@@ -79,7 +90,7 @@ public class StateExpander extends Runnable {
 	} // exportStateFile
 	
 
-	private void updateState(Model model1, Model model2) {
+	private void updateState(Model model1, Model model2) throws IOException, SAXException, ParserConfigurationException {
 		// copy pare of the state that model1 and model2 have in common
 		copyCommonStateNodes(model1, model2);
 		
@@ -216,7 +227,7 @@ public class StateExpander extends Runnable {
 
 	Node internalNode;
 	
-	private void positionAdditions(Model model2, String taxon) {
+	private void positionAdditions(Model model2, String taxon) throws IOException, SAXException, ParserConfigurationException {
 		// adding a single taxon
 		State state = model2.state;
 		Distribution posterior = model2.posterior;
@@ -239,11 +250,65 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 				state, posterior, model2.tree, logP);
 		
 		
-		
+		runAfterBurn(model2, newTaxon);
 		
 		Log.debug(model2.tree.getRoot().toNewick());
 
 	} // addAdditions
+
+	/** run short MCMC chain on subset of nodes aroun newTaxon 
+	 * @throws ParserConfigurationException 
+	 * @throws SAXException 
+	 * @throws IOException **/
+	private void runAfterBurn(Model model, Node newTaxon) throws IOException, SAXException, ParserConfigurationException {
+		
+		tree = model.tree;
+		TreePartition partition = determinePartition(model, newTaxon);
+		// add partition operators
+		ExchangeOnPartition op1 = new ExchangeOnPartition(model.tree, partition, 1.0);
+		op1.setID("ExchangeOnPartition");
+		UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
+		op2.setID("UniformOnPartition");
+		List<Operator> operators = new ArrayList<>();
+		operators.add(op1);
+		operators.add(op2);
+		
+		MCMC mcmc = newMCMC(model.mcmc, operators);
+		mcmc.run();
+		
+	}
+
+	private TreePartition determinePartition(Model model, Node newTaxon) {
+		Set<Integer> values = new HashSet<>();
+		Node parent = newTaxon.getParent();
+		addToPartition(parent, values);
+		addToPartition(parent.getLeft(), values);
+		addToPartition(parent.getRight(), values);
+		
+		if (!parent.isRoot()) {
+			Node gp = parent.getParent();
+			addToPartition(gp, values);
+			addToPartition(gp.getLeft(), values);
+			addToPartition(gp.getRight(), values);
+		}
+		
+		IntegerParameter index = new IntegerParameter(values.toArray(new Integer[]{}));
+		TreePartition partition = new TreePartition(model.tree, index);
+		return partition;
+	}
+
+	private void addToPartition(Node node, Set<Integer> values) {
+		if (node.isLeaf()) {
+			return;
+		}
+		values.add(node.getNr());
+		if (!node.getLeft().isLeaf()) {
+			values.add(node.getLeft().getNr());
+		}
+		if (node.getRight().isLeaf()) {
+			values.add(node.getRight().getNr());
+		}
+	}
 
 	private void tryLeftRight(Node newTaxon, Node child, State state, Distribution posterior, Tree tree, double logP) {
 		double originalHeigt = internalNode.getHeight();
@@ -427,18 +492,192 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 				}
 			}
 		}
+		model.mcmc = (MCMC) runnable;
 		model.posterior = (Distribution) runnable.getInputValue("distribution");
-		
-		// TODO: remove next 2 debug lines
-		model.posterior = ((CompoundDistribution) model.posterior).pDistributions.get().get(1);
-		model.posterior = ((CompoundDistribution) model.posterior).pDistributions.get().get(0);
-
 		model.operatorSchedule = (OperatorSchedule) runnable.getInputValue("operatorschedule");
 		if (model.operatorSchedule == null && runnable instanceof MCMC) {
 			model.operatorSchedule = ((MCMC) runnable).getOperatorSchedule();
 		}
 		return model;
 	} // getModelFromFile
+
+	
+	/**
+	 * build up MCMC object with appropriate tree operators
+	 * TODO: need rate operators as well?
+	 * @return
+	 */
+	private MCMC newMCMC(MCMC other, List<Operator> operators) {
+		
+		Logger screenlog = new Logger();
+		screenlog.initByName("log", other.posteriorInput.get(), "logEvery", (int)(long) chainLengthInput.get());
+
+		MCMC mcmc = new MCMC() {
+			   @Override
+			    public void run() throws IOException, SAXException, ParserConfigurationException {				   
+			        // set up state (again). Other beastObjects may have manipulated the
+			        // StateNodes, e.g. set up bounds or dimensions
+			        state.initAndValidate();
+			        // also, initialise state with the file name to store and set-up whether to resume from file
+			        state.setStateFileName(stateFileName);
+			        operatorSchedule.setStateFileName(stateFileName);
+
+			        burnIn = burnInInput.get();
+			        chainLength = chainLengthInput.get();
+			        state.setEverythingDirty(true);
+			        posterior = posteriorInput.get();
+
+			        oldLogLikelihood = state.robustlyCalcPosterior(posterior);
+
+			        state.storeCalculationNodes();
+
+			        
+			        // do the sampling
+			        logAlpha = 0;
+			        debugFlag = Boolean.valueOf(System.getProperty("beast.debug"));
+
+			        if (Double.isInfinite(oldLogLikelihood) || Double.isNaN(oldLogLikelihood)) {
+			            reportLogLikelihoods(posterior, "");
+			            throw new RuntimeException("Could not find a proper state to initialise. Perhaps try another seed.\nSee http://www.beast2.org/2018/07/04/fatal-errors.html for other possible solutions.");
+			        }
+
+			        loggers = loggersInput.get();
+
+			        // put the loggers logging to stdout at the bottom of the logger list so that screen output is tidier.
+			        Collections.sort(loggers, (o1, o2) -> {
+			            if (o1.isLoggingToStdout()) {
+			                return o2.isLoggingToStdout() ? 0 : 1;
+			            } else {
+			                return o2.isLoggingToStdout() ? -1 : 0;
+			            }
+			        });
+
+			        doLoop();
+			        
+			        Log.debug("[logP=" + oldLogLikelihood + "] " + tree.getRoot().toNewick());
+			    } // run;
+			   
+			    protected void doLoop() throws IOException {
+			        for (long sampleNr = -burnIn; sampleNr <= chainLength; sampleNr++) {
+			        				        	
+			            final Operator operator = propagateState(sampleNr);
+		                if (sampleNr >= 0) {
+		                	operator.optimize(logAlpha);
+		                }
+			            callUserFunction(sampleNr);
+			            
+			            if (posterior.getCurrentLogP() == Double.POSITIVE_INFINITY) {
+			            	throw new RuntimeException("Encountered a positive infinite posterior. This is a sign there may be numeric instability in the model.");
+			            }
+			        }
+			    }
+
+			   @Override
+			   public void log(long sampleNr) {
+				   // suppress output
+			   }
+			   
+			   @Override
+			   public void close() {
+				   // do nothing
+			   }
+			   
+			   @Override
+			   protected Operator propagateState(final long sampleNr) {
+			        state.store(sampleNr);
+			        final Operator operator = operatorSchedule.selectOperator();
+
+			        if (printDebugInfo) System.err.print("\n" + sampleNr + " " + operator.getName()+ ":");
+
+			        final Distribution evaluatorDistribution = operator.getEvaluatorDistribution();
+			        Evaluator evaluator = null;
+
+			        if (evaluatorDistribution != null) {
+			            evaluator = new Evaluator() {
+			                @Override
+			                public double evaluate() {
+			                    double logP = 0.0;
+
+			                    state.storeCalculationNodes();
+			                    state.checkCalculationNodesDirtiness();
+
+			                    try {
+			                        logP = evaluatorDistribution.calculateLogP();
+			                    } catch (Exception e) {
+			                        e.printStackTrace();
+			                        System.exit(1);
+			                    }
+
+			                    state.restore();
+			                    state.store(sampleNr);
+
+			                    return logP;
+			                }
+			            };
+			        }
+			        double logHastingsRatio = operator.proposal(evaluator);
+
+			        if (logHastingsRatio != Double.NEGATIVE_INFINITY) {
+
+			            if (operator.requiresStateInitialisation()) {
+			                state.storeCalculationNodes();
+			                state.checkCalculationNodesDirtiness();
+			            }
+
+			            newLogLikelihood = posterior.calculateLogP();
+			            if (newLogLikelihood == Double.POSITIVE_INFINITY) {
+			            	newLogLikelihood = Double.NEGATIVE_INFINITY;
+			            	logHastingsRatio = Double.NEGATIVE_INFINITY;
+			            }
+
+			            logAlpha = newLogLikelihood - oldLogLikelihood + logHastingsRatio; //CHECK HASTINGS
+			            if (printDebugInfo) System.err.print(logAlpha + " " + newLogLikelihood + " " + oldLogLikelihood);
+
+			            if (logAlpha >= 0 || Randomizer.nextDouble() < Math.exp(logAlpha)) {
+			                // accept
+			                oldLogLikelihood = newLogLikelihood;
+			                state.acceptCalculationNodes();
+
+			                if (sampleNr >= 0) {
+			                    operator.accept();
+			                }
+			                if (printDebugInfo) System.err.print(" accept");
+			            } else {
+			                // reject
+			                if (sampleNr >= 0) {
+			                    operator.reject(newLogLikelihood == Double.NEGATIVE_INFINITY ? -1 : 0);
+			                }
+			                // state.restore();
+			                state.restoreCalculationNodes();
+			                if (printDebugInfo) System.err.print(" reject");
+			            }
+			            state.setEverythingDirty(false);
+			        } else {
+			            // operation failed
+			            if (sampleNr >= 0) {
+			                operator.reject(-2);
+			            }
+			            // state.restore();
+			            if (!operator.requiresStateInitialisation()) {
+			                state.setEverythingDirty(false);
+			                state.restoreCalculationNodes();
+			            }
+			            if (printDebugInfo) System.err.print(" direct reject");
+			        }
+			        log(sampleNr);
+			        return operator;
+			    }
+		};
+		
+		mcmc.initByName(
+				"distribution", other.posteriorInput.get(), 
+				"chainLength", chainLengthInput.get(),
+				"operator", operators,
+				"logger", screenlog,
+				"operatorschedule", new OperatorSchedule()
+		);
+		return mcmc;
+	}
 
 	
 	public static void main(String[] args) throws Exception {
