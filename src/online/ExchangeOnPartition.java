@@ -106,9 +106,7 @@ public class ExchangeOnPartition extends TreeOperator {
     public void reject(int reason) {
     	super.reject(reason);
     	if (i != null) {
-    		// System.out.println("[pre-reject]" + treeInput.get().getRoot().toNewick());    	
             exchangeNodes(uncle, i, parentIndex, grandParent);
-            // System.out.println("[post-reject]" + treeInput.get().getRoot().toNewick());    	
     	}
     }
 
@@ -126,7 +124,6 @@ public class ExchangeOnPartition extends TreeOperator {
      */
     public double narrow(final Tree tree) {
     	this.i = null;
-// System.out.println("[pre-proposal]"+tree.getRoot().toNewick());    	
 
         final int internalNodes = tree.getInternalNodeCount();
         if (internalNodes <= 1) {
@@ -173,11 +170,6 @@ public class ExchangeOnPartition extends TreeOperator {
         this.grandParent = grandParent;
 
         final int validGPafter = validGP - c2 + sisg(parentIndex) + sisg(uncle);
-//if (tree.getRoot().getLeafNodeCount() != 9) {
-//	int h = 3;
-//	h++;
-//}
-// System.out.println("[post-proposal]"+tree.getRoot().toNewick());    	
 
         return Math.log((float)validGP/validGPafter);
     }
@@ -188,8 +180,6 @@ public class ExchangeOnPartition extends TreeOperator {
      * @param tree
      */
     public double wide(final Tree tree) {
-
-        final int nodeCount = tree.getNodeCount();
 
         Node i = tree.getRoot();
 

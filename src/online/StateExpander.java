@@ -442,7 +442,7 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 	} // determineInclusionsExclusions
 
 
-	// copy all state-nodes unless they are a tree, or they are parameters with differenjava -cp AARS.jar:/home/rbou019/.beast/2.6/BEAST/lib/beast.jar beast.app.beastapp.BeastMain -java ClassI_II_protozyme.xmlt dimensions (like rates)
+	// copy all state-nodes unless they are a tree, or they are parameters with different dimensions (like rates)
 	private void copyCommonStateNodes(Model model1, Model model2) {
 		State state1 = model1.state; 
 		State state2 = model2.state;
@@ -470,7 +470,6 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 				}
 			}
 		}
-		
 	} // checkStatesAreCompatible
 
 	
@@ -587,8 +586,6 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 			        state.store(sampleNr);
 			        final Operator operator = operatorSchedule.selectOperator();
 
-			        if (printDebugInfo) System.err.print("\n" + sampleNr + " " + operator.getName()+ ":");
-
 			        final Distribution evaluatorDistribution = operator.getEvaluatorDistribution();
 			        Evaluator evaluator = null;
 
@@ -631,8 +628,6 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 			            }
 
 			            logAlpha = newLogLikelihood - oldLogLikelihood + logHastingsRatio; //CHECK HASTINGS
-			            if (printDebugInfo) System.err.print(logAlpha + " " + newLogLikelihood + " " + oldLogLikelihood);
-
 			            if (logAlpha >= 0 || Randomizer.nextDouble() < Math.exp(logAlpha)) {
 			                // accept
 			                oldLogLikelihood = newLogLikelihood;
@@ -641,7 +636,6 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 			                if (sampleNr >= 0) {
 			                    operator.accept();
 			                }
-			                if (printDebugInfo) System.err.print(" accept");
 			            } else {
 			                // reject
 			                if (sampleNr >= 0) {
@@ -649,7 +643,6 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 			                }
 			                // state.restore();
 			                state.restoreCalculationNodes();
-			                if (printDebugInfo) System.err.print(" reject");
 			            }
 			            state.setEverythingDirty(false);
 			        } else {
@@ -662,7 +655,6 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 			                state.setEverythingDirty(false);
 			                state.restoreCalculationNodes();
 			            }
-			            if (printDebugInfo) System.err.print(" direct reject");
 			        }
 			        log(sampleNr);
 			        return operator;
