@@ -1,9 +1,11 @@
 package online;
 
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -17,6 +19,7 @@ import beast.app.util.Application;
 import beast.core.Description;
 import beast.core.Input;
 import beast.core.Logger;
+import beast.core.Logger.LogFileMode;
 import beast.core.State;
 import beast.core.StateNode;
 import beast.core.util.Log;
@@ -25,9 +28,16 @@ import beast.util.XMLParserException;
 
 @Description("Create tree and trace files extending an input multiple-state file with different set of taxa")
 public class TraceExpander extends BaseStateExpander {
-	final public Input<File> stateInput = new Input<>("state", "state file containing multiple states associated with initial XML file (xml1)", new File("[[none]]"));
-    final public Input<Integer> maxNrOfThreadsInput = new Input<>("threads","maximum number of threads to use, if less than 1 the number of threads in BeastMCMC is used (default -1)", -1);
+	final public Input<File> multiStateFileInput = new Input<>("multiStateFile", "state file containing multiple states associated with initial XML file (xml1)."
+			+ "If not specified, use xml1+\".state.multi\"", new File("[[none]]"));
 	
+	final public Input<File> stateFileInput = new Input<>("stateFile", "state file containing operarator optimisation information associated with initial XML file (xml1). "
+			+ "If not specified, use xml1+\".state\". If that does not exist, ignore.", new File("[[none]]"));
+
+    final public Input<Integer> maxNrOfThreadsInput = new Input<>("threads","maximum number of threads to use, if not specified the number of available cores is used (default)");
+    final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of trees to used as burn-in (and will be ignored)", 10);
+    final public Input<Boolean> overwriteInput = new Input<>("overwrite", "overwrite existing tree and trace files", true);
+
     private int nrOfThreads;
     private static ExecutorService exec;
     private static CountDownLatch countDown;
@@ -35,7 +45,8 @@ public class TraceExpander extends BaseStateExpander {
 	private Model model2;
 	private long sampleNr;
 	private BufferedReader fin;
-	
+	private String multiStateFile;
+	private PrintStream multiStateOut;
 
 	@Override
 	public void initAndValidate() {
@@ -43,9 +54,16 @@ public class TraceExpander extends BaseStateExpander {
 	
 	@Override
 	public void run() throws Exception {
+		Long start = System.currentTimeMillis();
 		Log.setLevel(Log.Level.debug);
+		if (overwriteInput.get()) {
+			Logger.FILE_MODE = LogFileMode.overwrite;
+		} else {
+			Logger.FILE_MODE = LogFileMode.only_new_or_exit;
+		}
+	
 		nrOfThreads = Runtime.getRuntime().availableProcessors();
-		if (maxNrOfThreadsInput.get() > 0) {
+		if (maxNrOfThreadsInput.get() != null && maxNrOfThreadsInput.get() > 0) {
 			nrOfThreads = Math.min(maxNrOfThreadsInput.get(), nrOfThreads);
 		}
 		if (nrOfThreads > 1) {
@@ -56,9 +74,18 @@ public class TraceExpander extends BaseStateExpander {
 			Randomizer.setSeed(seedInput.get());
 		}
 
+		
+		multiStateFile = multiStateFileInput.get().getPath();
+		if (multiStateFile == null || multiStateFile.equals("[[none]]")) {
+			multiStateFile = xml1Input.get().getPath() + ".state.multi"; 
+		}
+		if (!new File(multiStateFile).exists()) {
+			throw new IllegalArgumentException("Could not find state file " + multiStateFile);
+		}
+		
 		// import models
 		model2 = getModelFromFile(xml2Input.get());
-		Object o = model2.mcmc.getInput("logger");
+		Object o = model2.mcmc.getInput("logger").get();
 		if (o instanceof List<?>) {
 			loggers = (List<Logger>) o;
 		} else {
@@ -69,24 +96,35 @@ public class TraceExpander extends BaseStateExpander {
 			logger.initAndValidate();
 			logger.init();
 		}
+		multiStateOut = new PrintStream(xml2Input.get().getAbsolutePath() + ".state.multi");
 
 		int n = getStateCount();
 		sampleNr = 0;
+
+		// skip burn-in states
+        fin = new BufferedReader(new FileReader(multiStateFile));
+		int burnIn = burnInPercentageInput.get() * n / 100;
+		if (burnIn > 0) {
+			Log.info("Skipping " + burnIn + " states as burn-in");
+		}
+		for (int i = 0; i < burnIn; i++) {
+			nextState();
+		}
 		
 		
-        BufferedReader fin = new BufferedReader(new FileReader(stateInput.get()));
 		if (nrOfThreads == 1) {
-			processUnThreaded(n);
+			processUnThreaded(n - burnIn);
 		} else {
-			// split work over k threads, with work for n/k states each
-			processThreaded(n);
+			// split work over k threads, with work for (n - burnIn)/k states each
+			processThreaded(n - burnIn);
 		}
 		fin.close();
 
 		for (Logger logger : loggers) {
 			logger.close();
 		}
-		Log.debug("Done!");
+		Long end = System.currentTimeMillis();
+		Log.debug("Done in " + (end-start)/1000 + " seconds");
 	}
 
 	
@@ -104,10 +142,17 @@ public class TraceExpander extends BaseStateExpander {
             try {
         		Model model1 = getModelFromFile(xml1Input.get());
         		Model model2 = getModelFromFile(xml2Input.get());
-                model1.operatorSchedule.setStateFileName(stateInput.get().getAbsolutePath());
-                model1.operatorSchedule.restoreFromFile();	
-                model2.operatorSchedule.setStateFileName(stateInput.get().getAbsolutePath());
-                model2.operatorSchedule.restoreFromFile();	
+        		// restore operator settings, if possible
+        		String stateFile = stateFileInput.get().getPath();
+        		if (stateFile == null || stateFile.equals("[[none]]")) {
+        			stateFile = xml1Input.get().getPath() + ".state";
+        		}		
+        		if (new File(stateFile).exists()) {
+        	        model1.operatorSchedule.setStateFileName(stateFile);
+        	        model1.operatorSchedule.restoreFromFile();	
+        	        model2.operatorSchedule.setStateFileName(stateFile);
+        	        model2.operatorSchedule.restoreFromFile();	
+        		}
 
             	for (int i = from; i < to; i++) {
         			String xml = nextState();
@@ -144,10 +189,18 @@ public class TraceExpander extends BaseStateExpander {
 
 	private void processUnThreaded(int n)  throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		Model model1 = getModelFromFile(xml1Input.get());
-        model1.operatorSchedule.setStateFileName(stateInput.get().getAbsolutePath());
-        model1.operatorSchedule.restoreFromFile();	
-        model2.operatorSchedule.setStateFileName(stateInput.get().getAbsolutePath());
-        model2.operatorSchedule.restoreFromFile();	
+		
+		String stateFile = stateFileInput.get().getPath();
+		if (stateFile == null || stateFile.equals("[[none]]")) {
+			stateFile = xml1Input.get().getPath() + ".state";
+		}		
+		if (new File(stateFile).exists()) {
+	        model1.operatorSchedule.setStateFileName(stateFile);
+	        model1.operatorSchedule.restoreFromFile();	
+	        model2.operatorSchedule.setStateFileName(stateFile);
+	        model2.operatorSchedule.restoreFromFile();	
+		}
+		
 
         for (int i = 0; i < n; i++) {
 			// get state from file
@@ -172,7 +225,7 @@ public class TraceExpander extends BaseStateExpander {
 
 	/** counts number of states in state file **/
 	private int getStateCount() throws IOException {
-        BufferedReader fin = new BufferedReader(new FileReader(stateInput.get()));
+        BufferedReader fin = new BufferedReader(new FileReader(multiStateFile));
         String str = null;
         int n = 0;
         while (fin.ready()) {
@@ -197,6 +250,10 @@ public class TraceExpander extends BaseStateExpander {
 		
 		for (Logger logger : loggers) {
 			logger.log(sampleNr);
+		}
+		
+		if (multiStateOut != null) {
+			multiStateOut.println(other.toXML(sampleNr));
 		}
 		sampleNr++;
 	} // logState

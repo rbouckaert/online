@@ -115,15 +115,25 @@ public class UniformOnPartition extends TreeOperator {
         
         if (node.isRoot()) {
             final Node root = node;
-            double scale = (scaleFactor + (Randomizer.nextDouble() * ((1.0 / scaleFactor) - scaleFactor)));
-            final double newHeight = root.getHeight() * scale;
+            final double lower = Math.max(node.getLeft().getHeight(), node.getRight().getHeight());
+            final double upper = lower * 2;
+            final double newValue = (Randomizer.nextDouble() * (upper - lower)) + lower;
+            node.setHeight(newValue);
 
-            if (newHeight < Math.max(root.getLeft().getHeight(), root.getRight().getHeight())) {
-                this.node = null;
-                return Double.NEGATIVE_INFINITY;
-            }
-            root.setHeight(newHeight);
-            return -Math.log(scale);
+            return 0.0;
+
+            
+            
+            
+//            double scale = (scaleFactor + (Randomizer.nextDouble() * ((1.0 / scaleFactor) - scaleFactor)));
+//            final double newHeight = root.getHeight() * scale;
+//
+//            if (newHeight < Math.max(root.getLeft().getHeight(), root.getRight().getHeight())) {
+//                this.node = null;
+//                return Double.NEGATIVE_INFINITY;
+//            }
+//            root.setHeight(newHeight);
+//            return -Math.log(scale);
         }
         
     	

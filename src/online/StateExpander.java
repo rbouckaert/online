@@ -8,20 +8,27 @@ import beast.core.*;
 import beast.core.util.Log;
 import beast.util.Randomizer;
 
-
-// TODO: source from tracelog & tree file + write new tree file (& tracelog) 
-// TODO: take rates in account
-
 @Description("Create state file extending an input state file with different set of taxa")
 public class StateExpander extends BaseStateExpander {
-	final public Input<File> stateInput = new Input<>("state", "state file associated with initial XML file (xml1)", new File("[[none]]"));
+	final public Input<File> stateFileInput = new Input<>("stateFile", "state file associated with initial XML file (xml1). "
+			+ "If not specified, use xml1+\".state\"", new File("[[none]]"));
 	
+
 	@Override
 	public void initAndValidate() {
 	}
-
+	
 	@Override
 	public void run() throws Exception {
+		String stateFile = stateFileInput.get().getPath();
+		if (stateFile == null || stateFile.equals("[[none]]")) {
+			stateFile = xml1Input.get().getAbsolutePath() + ".state";
+		}
+		if (!new File(stateFile).exists()) {
+			throw new IllegalArgumentException("Could not find state file " + stateFile);
+		}
+		
+		
 		Log.setLevel(Log.Level.debug);
 		if (seedInput.get() != null) {
 			Randomizer.setSeed(seedInput.get());
@@ -32,11 +39,11 @@ public class StateExpander extends BaseStateExpander {
 		Model model2 = getModelFromFile(xml2Input.get());
 
 		// get state from file
-		model1.state.setStateFileName(stateInput.get().getAbsolutePath());
+		model1.state.setStateFileName(stateFile);
 		model1.state.restoreFromFile();
-        model1.operatorSchedule.setStateFileName(stateInput.get().getAbsolutePath());
+        model1.operatorSchedule.setStateFileName(stateFile);
         model1.operatorSchedule.restoreFromFile();
-        model2.operatorSchedule.setStateFileName(stateInput.get().getAbsolutePath());
+        model2.operatorSchedule.setStateFileName(stateFile);
         model2.operatorSchedule.restoreFromFile();
 		
 		updateState(model1, model2);

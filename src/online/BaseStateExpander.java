@@ -36,6 +36,8 @@ import beast.evolution.tree.Tree;
 import beast.util.XMLParser;
 import beast.util.XMLParserException;
 
+//TODO: take rates in account
+//TODO: take group sizes in account
 
 @Description("Base class for create a new state extending an input state with different set of taxa")
 public class BaseStateExpander extends beast.core.Runnable {
