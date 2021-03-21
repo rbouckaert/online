@@ -36,6 +36,8 @@ public class StateExpander extends BaseStateExpander {
 		model1.state.restoreFromFile();
         model1.operatorSchedule.setStateFileName(stateInput.get().getAbsolutePath());
         model1.operatorSchedule.restoreFromFile();
+        model2.operatorSchedule.setStateFileName(stateInput.get().getAbsolutePath());
+        model2.operatorSchedule.restoreFromFile();
 		
 		updateState(model1, model2);
 		
