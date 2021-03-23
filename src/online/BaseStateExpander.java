@@ -52,6 +52,13 @@ public class BaseStateExpander extends beast.core.Runnable {
 	Map<String, Integer> map;
 	Node internalNode;
 
+	public BaseStateExpander() {
+	}
+	public BaseStateExpander(Long chainLength) {
+		chainLengthInput.setValue(chainLength, this);
+	}
+
+
 	@Override
 	public void initAndValidate() {
 	}
@@ -243,6 +250,26 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		
 		mcmc.run();
 		
+//		try {
+//			PrintStream o = new PrintStream(new File("/tmp/beast1.xml"));
+//			XMLProducer p = new XMLProducer();
+//			o.println(p.toRawXML(mcmc));
+//			o.close();
+//		} catch (Exception e) {
+//			// TODO: handle exception
+//		}
+//		
+//		try {
+//			PrintStream o = new PrintStream(new File("/tmp/beast2.xml"));
+//			XMLProducer p = new XMLProducer();
+//			o.println(p.toRawXML(model.mcmc));
+//			o.close();
+//		} catch (Exception e) {
+//			// TODO: handle exception
+//		}
+		
+		
+		
 		State state = mcmc.startStateInput.get();
 		State other = model.state;
 		for (int i = 0; i < state.getNrOfStateNodes(); i++) {
@@ -266,14 +293,20 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
 		op2.setID("UniformOnPartition");
 		List<Operator> operators = new ArrayList<>();
-		operators.add(op1);
-		operators.add(op2);
-		
+//		operators.add(op1);
+//		operators.add(op2);
+
+		double sumWeight = 0;
 		for (Operator op : model.mcmc.operatorsInput.get()) {
-			if (!(op instanceof TreeOperator)) {
+			//if (!(op instanceof TreeOperator)) {
+				sumWeight += op.m_pWeight.get();
+			//}
+		}
+		for (Operator op : model.mcmc.operatorsInput.get()) {
+			//if (!(op instanceof TreeOperator)) {
 				operators.add(op);
-				op.m_pWeight.setValue(op.m_pWeight.get() / 10.0, op);
-			}
+			//	op.m_pWeight.setValue(op.m_pWeight.get() / (sumWeight * 10 + 4), op);
+			//}
 		}
 		
 		

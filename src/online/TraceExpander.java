@@ -17,6 +17,7 @@ import org.xml.sax.SAXException;
 
 import beast.app.util.Application;
 import beast.core.Description;
+import beast.core.Distribution;
 import beast.core.Input;
 import beast.core.Logger;
 import beast.core.Logger.LogFileMode;
@@ -52,6 +53,7 @@ public class TraceExpander extends BaseStateExpander {
 	public void initAndValidate() {
 	}
 	
+	@SuppressWarnings("unchecked")
 	@Override
 	public void run() throws Exception {
 		Long start = System.currentTimeMillis();
@@ -125,6 +127,7 @@ public class TraceExpander extends BaseStateExpander {
 		}
 		Long end = System.currentTimeMillis();
 		Log.info("Done in " + (end-start)/1000 + " seconds");
+		System.exit(0);
 	}
 
 	
@@ -140,6 +143,7 @@ public class TraceExpander extends BaseStateExpander {
         @Override
 		public void run() {
             try {
+            	BaseStateExpander expander = new BaseStateExpander(chainLengthInput.get());
         		Model model1 = getModelFromFile(xml1Input.get());
         		Model model2 = getModelFromFile(xml2Input.get());
         		// restore operator settings, if possible
@@ -157,7 +161,7 @@ public class TraceExpander extends BaseStateExpander {
             	for (int i = from; i < to; i++) {
         			String xml = nextState();
         			model1.state.fromXML(xml);
-        			updateState(model1, model2);
+        			expander.updateState(model1, model2);
         			logState(model2.state);
             	}
             } catch (Exception e) {
@@ -207,7 +211,13 @@ public class TraceExpander extends BaseStateExpander {
 			String xml = nextState();
 			model1.state.fromXML(xml);
 			updateState(model1, model2);
+
+			Distribution p = model2.mcmc.posteriorInput.get();
+			double logP2 = model2.state.robustlyCalcPosterior(p);
 			logState(model2.state);
+
+//			double logP = p.getCurrentLogP();
+//			System.err.println(logP + " - " + logP2 + " = " + (logP - logP2));
 		}
 	}
 

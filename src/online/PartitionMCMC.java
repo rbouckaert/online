@@ -3,7 +3,6 @@ package online;
 
 
 import java.io.IOException;
-import java.util.Collections;
 
 import javax.xml.parsers.ParserConfigurationException;
 
@@ -60,6 +59,7 @@ public class PartitionMCMC extends MCMC {
         loggers = loggersInput.get();
         doLoop();
 
+        
     } // run;
    
 
@@ -68,6 +68,7 @@ public class PartitionMCMC extends MCMC {
         int corrections = 0;
         final boolean isStochastic = posterior.isStochastic();
                 
+// debugFlag = true;        
         if (burnIn > 0) {
         		Log.warning.println("Please wait while BEAST takes " + burnIn + " pre-burnin samples");
         }
@@ -99,7 +100,7 @@ public class PartitionMCMC extends MCMC {
                             operatorSchedule.storeToFile();
                             System.exit(1);
                         }
-                        oldLogLikelihood = state.robustlyCalcPosterior(posterior);;
+                        oldLogLikelihood = state.robustlyCalcPosterior(posterior);
                     }
                 } else {
 	                if (Math.abs(logLikelihood - originalLogP) > 1e-6) {
@@ -120,5 +121,6 @@ public class PartitionMCMC extends MCMC {
         	Log.err.println("\n\nNB: " + corrections + " posterior calculation corrections were required. This analysis may not be valid!\n\n");
         }
     }
+    
 }
 
