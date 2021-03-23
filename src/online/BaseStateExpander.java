@@ -200,6 +200,7 @@ public class BaseStateExpander extends beast.core.Runnable {
 		Distribution posterior = model2.posterior;
 		
 		// calc logP when new taxon is outgroup
+        state.setEverythingDirty(true);
         state.storeCalculationNodes();
         state.checkCalculationNodesDirtiness();
     	double logP = posterior.calculateLogP();
@@ -236,7 +237,7 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
 		op2.setID("UniformOnPartition");
 		List<Operator> operators = new ArrayList<>();
-		operators.add(op1);
+		// operators.add(op1);
 		operators.add(op2);
 		
 		MCMC mcmc = newMCMC(model.mcmc, operators, model.tree);

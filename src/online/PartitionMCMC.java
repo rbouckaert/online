@@ -22,6 +22,12 @@ import beast.core.MCMC;
 public class PartitionMCMC extends MCMC {
 	private Tree tree;
 
+    /**
+     * Set this to true to enable detailed MCMC debugging information
+     * to be displayed.
+     */
+    public static boolean printDebugInfo = true;
+
 	PartitionMCMC(Tree tree) {
 		this.tree = tree;
 	}
@@ -73,7 +79,10 @@ public class PartitionMCMC extends MCMC {
 	} // run;
 
 	protected void doLoop() throws IOException {
-		for (long sampleNr = -burnIn; sampleNr <= chainLength; sampleNr++) {
+        final boolean isStochastic = posterior.isStochastic();
+        oldLogLikelihood = state.robustlyCalcPosterior(posterior);
+
+        for (long sampleNr = -burnIn; sampleNr <= chainLength; sampleNr++) {
 
 			final Operator operator = propagateState(sampleNr);
 			if (sampleNr >= 0) {
@@ -85,6 +94,20 @@ public class PartitionMCMC extends MCMC {
 				throw new RuntimeException(
 						"Encountered a positive infinite posterior. This is a sign there may be numeric instability in the model.");
 			}
+			
+			
+            if (debugFlag && sampleNr % 3 == 0 || sampleNr % 10000 == 0) {
+                // check that the posterior is correctly calculated at every third
+                // sample, as long as we are in debug mode
+            	final double originalLogP = isStochastic ? posterior.getNonStochasticLogP() : oldLogLikelihood;
+                final double logLikelihood = isStochastic ? state.robustlyCalcNonStochasticPosterior(posterior) : state.robustlyCalcPosterior(posterior);
+                if (Math.abs(logLikelihood - originalLogP) > 1e-6) {
+                    reportLogLikelihoods(posterior, "");
+                    Log.err.println("At sample " + sampleNr + "\nLikelihood incorrectly calculated: " + originalLogP + " != " + logLikelihood
+                    		+ "(" + (originalLogP - logLikelihood) + ")"
+                            + " Operator: " + operator.getName());
+                }
+            }
 		}
 	}
 
@@ -122,59 +145,75 @@ public class PartitionMCMC extends MCMC {
 						System.exit(1);
 					}
 
-					state.restore();
+					// state.restore();
 					state.store(sampleNr);
 
 					return logP;
 				}
 			};
 		}
+		String stateXML = state.toXML(0);
 		double logHastingsRatio = operator.proposal(evaluator);
 
-		if (logHastingsRatio != Double.NEGATIVE_INFINITY) {
+	
+        if (logHastingsRatio != Double.NEGATIVE_INFINITY) {
 
-			if (operator.requiresStateInitialisation()) {
-				state.storeCalculationNodes();
-				state.checkCalculationNodesDirtiness();
-			}
+            if (operator.requiresStateInitialisation()) {
+                state.storeCalculationNodes();
+                state.checkCalculationNodesDirtiness();
+            }
 
-			newLogLikelihood = posterior.calculateLogP();
-			if (newLogLikelihood == Double.POSITIVE_INFINITY) {
-				newLogLikelihood = Double.NEGATIVE_INFINITY;
-				logHastingsRatio = Double.NEGATIVE_INFINITY;
-			}
+            newLogLikelihood = posterior.calculateLogP();
+            if (newLogLikelihood == Double.POSITIVE_INFINITY) {
+            	newLogLikelihood = Double.NEGATIVE_INFINITY;
+            	logHastingsRatio = Double.NEGATIVE_INFINITY;
+            }
 
-			logAlpha = newLogLikelihood - oldLogLikelihood + logHastingsRatio; // CHECK
-																				// HASTINGS
-			if (logAlpha >= 0 || Randomizer.nextDouble() < Math.exp(logAlpha)) {
-				// accept
-				oldLogLikelihood = newLogLikelihood;
-				state.acceptCalculationNodes();
+            logAlpha = newLogLikelihood - oldLogLikelihood + logHastingsRatio; //CHECK HASTINGS
+            if (printDebugInfo) System.err.print("\n" + logAlpha + " " + newLogLikelihood + " " + oldLogLikelihood);
 
-				if (sampleNr >= 0) {
-					operator.accept();
+            if (logAlpha >= 0 || Randomizer.nextDouble() < Math.exp(logAlpha)) {
+                // accept
+                oldLogLikelihood = newLogLikelihood;
+                state.acceptCalculationNodes();
+
+                if (sampleNr >= 0) {
+                    operator.accept();
+                }
+                if (printDebugInfo) System.err.print(" accept");
+            } else {
+                // reject
+                if (sampleNr >= 0) {
+                    operator.reject(newLogLikelihood == Double.NEGATIVE_INFINITY ? -1 : 0);
+                }
+                //state.restore();
+                state.restoreCalculationNodes();
+                if (printDebugInfo) System.err.print(" reject");
+				String stateXML2 = state.toXML(0);
+				if (!stateXML.equals(stateXML2)) {
+					int h = 4;
+					h++;
 				}
-			} else {
-				// reject
-				if (sampleNr >= 0) {
-					operator.reject(newLogLikelihood == Double.NEGATIVE_INFINITY ? -1 : 0);
-				}
-				// state.restore();
-				state.restoreCalculationNodes();
+            }
+            state.setEverythingDirty(false);
+        } else {
+            // operation failed
+            if (sampleNr >= 0) {
+                operator.reject(-2);
+            }
+            //state.restore();
+            if (!operator.requiresStateInitialisation()) {
+                state.setEverythingDirty(false);
+                state.restoreCalculationNodes();
+            }
+            if (printDebugInfo) System.err.print(" direct reject");
+			String stateXML2 = state.toXML(0);
+			if (!stateXML.equals(stateXML2)) {
+				int h = 4;
+				h++;
 			}
-			state.setEverythingDirty(false);
-		} else {
-			// operation failed
-			if (sampleNr >= 0) {
-				operator.reject(-2);
-			}
-			// state.restore();
-			if (!operator.requiresStateInitialisation()) {
-				state.setEverythingDirty(false);
-				state.restoreCalculationNodes();
-			}
-		}
-		log(sampleNr);
-		return operator;
+        }
+        log(sampleNr);
+        return operator;
 	}
 }
