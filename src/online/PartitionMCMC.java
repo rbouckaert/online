@@ -40,7 +40,7 @@ public class PartitionMCMC extends MCMC {
         burnIn = burnInInput.get();
         chainLength = chainLengthInput.get();
 		if (operatorSchedule instanceof AfterburnOperatorSchedule) {
-			((AfterburnOperatorSchedule)operatorSchedule).reset(chainLength/2);
+			((AfterburnOperatorSchedule)operatorSchedule).reset((long)(chainLengthProportion * chainLength));
 		}
         state.setEverythingDirty(true);
         posterior = posteriorInput.get();
@@ -125,6 +125,12 @@ public class PartitionMCMC extends MCMC {
         	Log.err.println("\n\nNB: " + corrections + " posterior calculation corrections were required. This analysis may not be valid!\n\n");
         }
     }
+
+
+    double chainLengthProportion = 0.5;;
+	public void setProportion(Double chainLengthProportion) {
+		this.chainLengthProportion = chainLengthProportion;		
+	}
     
 }
 

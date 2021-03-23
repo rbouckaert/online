@@ -30,7 +30,6 @@ import beast.core.StateNode;
 import beast.core.parameter.IntegerParameter;
 import beast.core.parameter.Parameter;
 import beast.core.util.Log;
-import beast.evolution.operators.TreeOperator;
 import beast.evolution.tree.Node;
 import beast.evolution.tree.TraitSet;
 import beast.evolution.tree.Tree;
@@ -47,6 +46,8 @@ public class BaseStateExpander extends beast.core.Runnable {
 	final public Input<XMLFile> xml2Input = new Input<>("xml2", "BEAST XML file with expanded state", new XMLFile("[[none]]"));
 	
 	final public Input<Long> chainLengthInput = new Input<>("chainLength", "Length of the MCMC chain used after placement of taxa", 1000L);
+	final public Input<Double> proportionPartitionedInput = new Input<>("proportionPartitioned", "proportion of MCMC chain only using operators local to the part of the tree that changed", 0.5);
+	
 	final public Input<Long> seedInput = new Input<>("seed", "Specify a random number generator seed");
 
 	Map<String, Integer> map;
@@ -246,6 +247,7 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		}
 		
 		((PartitionMCMC)mcmc).initState(model.state.toXML(0));
+		((PartitionMCMC)mcmc).setProportion(proportionPartitionedInput.get());
 		
 		mcmc.run();
 		
@@ -255,7 +257,7 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 //			o.println(p.toRawXML(mcmc));
 //			o.close();
 //		} catch (Exception e) {
-//			// TODO: handle exception
+//			// ignore
 //		}
 //		
 //		try {
@@ -264,7 +266,7 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 //			o.println(p.toRawXML(model.mcmc));
 //			o.close();
 //		} catch (Exception e) {
-//			// TODO: handle exception
+//			// ignore
 //		}
 		
 		
