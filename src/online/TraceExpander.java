@@ -55,7 +55,7 @@ public class TraceExpander extends BaseStateExpander {
 	@Override
 	public void run() throws Exception {
 		Long start = System.currentTimeMillis();
-		Log.setLevel(Log.Level.debug);
+//		Log.setLevel(Log.Level.debug);
 		if (overwriteInput.get()) {
 			Logger.FILE_MODE = LogFileMode.overwrite;
 		} else {
@@ -124,7 +124,7 @@ public class TraceExpander extends BaseStateExpander {
 			logger.close();
 		}
 		Long end = System.currentTimeMillis();
-		Log.debug("Done in " + (end-start)/1000 + " seconds");
+		Log.info("Done in " + (end-start)/1000 + " seconds");
 	}
 
 	
@@ -249,13 +249,22 @@ public class TraceExpander extends BaseStateExpander {
 		}
 		
 		for (Logger logger : loggers) {
-			logger.log(sampleNr);
+			if (logger.getFileName() != null) {
+				logger.log(sampleNr);
+			}
 		}
 		
 		if (multiStateOut != null) {
 			multiStateOut.println(other.toXML(sampleNr));
 		}
 		sampleNr++;
+		if (sampleNr % 10 == 0) {
+			if (sampleNr % 50 == 0) {
+				System.err.print("|");
+			} else {
+				System.err.print(".");
+			}
+		}
 	} // logState
 		
 	public static void main(String[] args) throws Exception {

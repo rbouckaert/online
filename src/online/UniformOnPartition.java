@@ -105,41 +105,38 @@ public class UniformOnPartition extends TreeOperator {
         	i = partition.getRandomNode();
         	attempt++;
         	if (attempt == 100) {
-                this.node = null;
+//                this.node = null;
         		return Double.NEGATIVE_INFINITY;
         	}
         }
 
-        this.node = node;
-        this.originalHeight = node.getHeight();
+//        this.node = node;
+//        this.originalHeight = node.getHeight();
         
         if (node.isRoot()) {
             final Node root = node;
-            final double lower = Math.max(node.getLeft().getHeight(), node.getRight().getHeight());
-            final double upper = lower * 2;
-            final double newValue = (Randomizer.nextDouble() * (upper - lower)) + lower;
-            node.setHeight(newValue);
-
-            return 0.0;
-
-            
-            
-            
-//            double scale = (scaleFactor + (Randomizer.nextDouble() * ((1.0 / scaleFactor) - scaleFactor)));
-//            final double newHeight = root.getHeight() * scale;
+//            final double lower = Math.max(node.getLeft().getHeight(), node.getRight().getHeight());
+//            final double upper = lower * 2;
+//            final double newValue = (Randomizer.nextDouble() * (upper - lower)) + lower;
+//            node.setHeight(newValue);
 //
-//            if (newHeight < Math.max(root.getLeft().getHeight(), root.getRight().getHeight())) {
+//            return 0.0;
+
+            double scale = (scaleFactor + (Randomizer.nextDouble() * ((1.0 / scaleFactor) - scaleFactor)));
+            final double newHeight = root.getHeight() * scale;
+
+            if (newHeight < Math.max(root.getLeft().getHeight(), root.getRight().getHeight())) {
 //                this.node = null;
-//                return Double.NEGATIVE_INFINITY;
-//            }
-//            root.setHeight(newHeight);
-//            return -Math.log(scale);
+                return Double.NEGATIVE_INFINITY;
+            }
+            root.setHeight(newHeight);
+            return -Math.log(scale);
         }
         
     	
 		// Abort if no non-root internal nodes
         if (i < 0) {
-            this.node = null;
+//            this.node = null;
             return Double.NEGATIVE_INFINITY;
         }
         
@@ -152,16 +149,16 @@ public class UniformOnPartition extends TreeOperator {
     }
 
     
-    Node node;
-    double originalHeight;
+//    Node node;
+//    double originalHeight;
     
     @Override
     public void reject(int reason) {
     	super.reject(reason);
     	
-    	if (node != null) {
-    		node.setHeight(originalHeight);
-    	}
+//    	if (node != null) {
+//    		node.setHeight(originalHeight);
+//    	}
     }
     
     @Override

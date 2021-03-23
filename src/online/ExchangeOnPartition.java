@@ -103,14 +103,14 @@ public class ExchangeOnPartition extends TreeOperator {
         return logHastingsRatio;
     }
     
-    Node i, uncle, parentIndex, grandParent;
+    // Node i, uncle, parentIndex, grandParent;
 
     @Override
     public void reject(int reason) {
     	super.reject(reason);
-    	if (i != null) {
-            exchangeNodes(uncle, i, parentIndex, grandParent);
-    	}
+//    	if (i != null) {
+//            exchangeNodes(uncle, i, parentIndex, grandParent);
+//    	}
     }
 
 
@@ -126,7 +126,7 @@ public class ExchangeOnPartition extends TreeOperator {
      * WARNING: Assumes strictly bifurcating beast.tree.
      */
     public double narrow(final Tree tree) {
-    	this.i = null;
+    	// this.i = null;
 
         final int internalNodes = tree.getInternalNodeCount();
         if (internalNodes <= 1) {
@@ -167,10 +167,10 @@ public class ExchangeOnPartition extends TreeOperator {
         final Node i = (Randomizer.nextBoolean() ? parentIndex.getLeft() : parentIndex.getRight());
         exchangeNodes(i, uncle, parentIndex, grandParent);
 
-        this.i = i;
-        this.uncle = uncle;
-        this.parentIndex = parentIndex;
-        this.grandParent = grandParent;
+//        this.i = i;
+//        this.uncle = uncle;
+//        this.parentIndex = parentIndex;
+//        this.grandParent = grandParent;
 
         final int validGPafter = validGP - c2 + sisg(parentIndex) + sisg(uncle);
 

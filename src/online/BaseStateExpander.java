@@ -30,6 +30,7 @@ import beast.core.StateNode;
 import beast.core.parameter.IntegerParameter;
 import beast.core.parameter.Parameter;
 import beast.core.util.Log;
+import beast.evolution.operators.TreeOperator;
 import beast.evolution.tree.Node;
 import beast.evolution.tree.TraitSet;
 import beast.evolution.tree.Tree;
@@ -230,33 +231,18 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	 * @throws SAXException 
 	 * @throws IOException 
 	 * @throws XMLParserException **/
+	
+	MCMC mcmc = null;
 	protected void runAfterBurn(Model model, Node newTaxon) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		
-		TreePartition partition = determinePartition(model, newTaxon);
-		// add partition operators
-		ExchangeOnPartition op1 = new ExchangeOnPartition(model.tree, partition, 1.0);
-		op1.setID("ExchangeOnPartition");
-		UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
-		op2.setID("UniformOnPartition");
-		List<Operator> operators = new ArrayList<>();
-		operators.add(op1);
-		operators.add(op2);
+		if (mcmc == null) {
+			mcmc = newMCMC(model, newTaxon);
+		}
 		
-		MCMC mcmc = newMCMC(model, operators, model.tree);
-		XMLProducer producer = new XMLProducer();
-		String xml = producer.toRawXML(mcmc);
-		xml = xml.replaceAll("'beast.core.MCMC'", "'online.PartitionMCMC'");
-		
-		PrintStream out = new PrintStream(new File("/tmp/beast.xml"));
-		out.println(xml);
-		out.close();
-		
-		
-		XMLParser parser = new XMLParser();
-		mcmc = (MCMC) parser.parseBareFragment(xml, true);
 		((PartitionMCMC)mcmc).initState(model.state.toXML(0));
 		
 		mcmc.run();
+		
 		State state = mcmc.startStateInput.get();
 		State other = model.state;
 		for (int i = 0; i < state.getNrOfStateNodes(); i++) {
@@ -270,8 +256,26 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	 * build up MCMC object with appropriate tree operators
 	 * TODO: need rate operators as well?
 	 * @return
+	 * @throws XMLParserException 
 	 */
-	private MCMC newMCMC(Model model, List<Operator> operators, Tree tree) {
+	private MCMC newMCMC(Model model, Node newTaxon) throws XMLParserException { //List<Operator> operators, Tree tree) {
+		TreePartition partition = determinePartition(model, newTaxon);
+		// add partition operators
+		ExchangeOnPartition op1 = new ExchangeOnPartition(model.tree, partition, 1.0);
+		op1.setID("ExchangeOnPartition");
+		UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
+		op2.setID("UniformOnPartition");
+		List<Operator> operators = new ArrayList<>();
+		operators.add(op1);
+		operators.add(op2);
+		
+		for (Operator op : model.mcmc.operatorsInput.get()) {
+			if (!(op instanceof TreeOperator)) {
+				operators.add(op);
+				op.m_pWeight.setValue(op.m_pWeight.get() / 10.0, op);
+			}
+		}
+		
 		
 		Logger screenlog = new Logger();
 		screenlog.initByName("log", model.mcmc.posteriorInput.get(), "logEvery", (int)(long) chainLengthInput.get());
@@ -286,6 +290,23 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 				"logger", screenlog,
 				"operatorschedule", new OperatorSchedule()
 		);
+
+		
+		XMLProducer producer = new XMLProducer();
+		String xml = producer.toRawXML(mcmc);
+		xml = xml.replaceAll("'beast.core.MCMC'", "'online.PartitionMCMC'");
+		
+//	try {
+//			PrintStream out = new PrintStream(new File("/tmp/beast.xml"));
+//			out.println(xml);
+//			out.close();
+//	} catch (IOException e) {
+//		e.printStackTrace();
+//	}
+		
+		XMLParser parser = new XMLParser();
+		mcmc = (MCMC) parser.parseBareFragment(xml, true);
+		
 		return mcmc;
 	}
 
