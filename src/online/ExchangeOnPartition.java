@@ -65,7 +65,7 @@ import beast.util.Randomizer;
 @Description("Implements branch exchange operations. There is a NARROW and WIDE variety. " +
         "The narrow exchange is very similar to a rooted-beast.tree nearest-neighbour " +
         "interchange but with the restriction that node height must remain consistent.")
-public class ExchangeOnPartition extends TreeOperator {
+public class ExchangeOnPartition extends TreeOperator implements PartitionOperator {
     final public Input<Boolean> isNarrowInput = new Input<>("isNarrow", "if true (default) a narrow exchange is performed, otherwise a wide exchange", true);
 	final public Input<TreePartition> partitionInput = new Input<>("partition", "specifies part of the tree to be operated on");
 

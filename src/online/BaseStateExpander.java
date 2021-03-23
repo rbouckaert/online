@@ -89,6 +89,11 @@ public class BaseStateExpander extends beast.core.Runnable {
 			addTaxon(model2, taxon, leafNodeCount);
 			positionAdditions(model2, taxon);
 		}
+		
+		afterBurner(model2, additions);
+		
+		Log.debug(model2.tree.getRoot().toNewick());
+
 	} // updateState
 		
 
@@ -225,12 +230,6 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		tryLeftRight(newTaxon,
 				root.getLeft() == newTaxon ? root.getRight() : root.getLeft(),
 				state, posterior, model2.tree, logP);
-		
-		
-		runAfterBurn(model2, newTaxon);
-		
-		Log.debug(model2.tree.getRoot().toNewick());
-
 	} // addAdditions
 
 	/** run short MCMC chain on subset of nodes aroun newTaxon 
@@ -240,10 +239,10 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	 * @throws XMLParserException **/
 	
 	MCMC mcmc = null;
-	protected void runAfterBurn(Model model, Node newTaxon) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
+	protected void afterBurner(Model model, List<String> additions) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		
 		if (mcmc == null) {
-			mcmc = newMCMC(model, newTaxon);
+			mcmc = newMCMC(model, additions);
 		}
 		
 		((PartitionMCMC)mcmc).initState(model.state.toXML(0));
@@ -285,29 +284,30 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	 * @return
 	 * @throws XMLParserException 
 	 */
-	private MCMC newMCMC(Model model, Node newTaxon) throws XMLParserException { //List<Operator> operators, Tree tree) {
-		TreePartition partition = determinePartition(model, newTaxon);
+	private MCMC newMCMC(Model model, List<String> additions) throws XMLParserException { //List<Operator> operators, Tree tree) {
+		TreePartition partition = determinePartition(model, additions);
 		// add partition operators
 		ExchangeOnPartition op1 = new ExchangeOnPartition(model.tree, partition, 1.0);
 		op1.setID("ExchangeOnPartition");
 		UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
 		op2.setID("UniformOnPartition");
 		List<Operator> operators = new ArrayList<>();
-//		operators.add(op1);
-//		operators.add(op2);
+		operators.add(op1);
+		operators.add(op2);
+		operators.addAll(model.mcmc.operatorsInput.get());
 
-		double sumWeight = 0;
-		for (Operator op : model.mcmc.operatorsInput.get()) {
-			//if (!(op instanceof TreeOperator)) {
-				sumWeight += op.m_pWeight.get();
-			//}
-		}
-		for (Operator op : model.mcmc.operatorsInput.get()) {
-			//if (!(op instanceof TreeOperator)) {
-				operators.add(op);
-			//	op.m_pWeight.setValue(op.m_pWeight.get() / (sumWeight * 10 + 4), op);
-			//}
-		}
+//		double sumWeight = 0;
+//		for (Operator op : model.mcmc.operatorsInput.get()) {
+//			//if (!(op instanceof TreeOperator)) {
+//				sumWeight += op.m_pWeight.get();
+//			//}
+//		}
+//		for (Operator op : model.mcmc.operatorsInput.get()) {
+//			//if (!(op instanceof TreeOperator)) {
+//				operators.add(op);
+//			//	op.m_pWeight.setValue(op.m_pWeight.get() / (sumWeight * 10 + 4), op);
+//			//}
+//		}
 		
 		
 		Logger screenlog = new Logger();
@@ -321,7 +321,7 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 				"chainLength", chainLengthInput.get(),
 				"operator", operators,
 				"logger", screenlog,
-				"operatorschedule", new OperatorSchedule()
+				"operatorschedule", new AfterburnOperatorSchedule()
 		);
 
 		
@@ -343,18 +343,22 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		return mcmc;
 	}
 
-	protected TreePartition determinePartition(Model model, Node newTaxon) {
+	protected TreePartition determinePartition(Model model, List<String> additions) {
 		Set<Integer> values = new HashSet<>();
-		Node parent = newTaxon.getParent();
-		addToPartition(parent, values);
-		addToPartition(parent.getLeft(), values);
-		addToPartition(parent.getRight(), values);
-		
-		if (!parent.isRoot()) {
-			Node gp = parent.getParent();
-			addToPartition(gp, values);
-			addToPartition(gp.getLeft(), values);
-			addToPartition(gp.getRight(), values);
+		for (String taxonName : additions) {
+			int nodeNr = indexOf(taxonName, model.tree.getTaxaNames());
+			Node newTaxon = model.tree.getNode(nodeNr);
+			Node parent = newTaxon.getParent();
+			addToPartition(parent, values);
+			addToPartition(parent.getLeft(), values);
+			addToPartition(parent.getRight(), values);
+			
+			if (!parent.isRoot()) {
+				Node gp = parent.getParent();
+				addToPartition(gp, values);
+				addToPartition(gp.getLeft(), values);
+				addToPartition(gp.getRight(), values);
+			}
 		}
 		
 		IntegerParameter index = new IntegerParameter(values.toArray(new Integer[]{}));
@@ -362,6 +366,14 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		return partition;
 	}
 
+	private int indexOf(String taxonName, String[] taxaNames) {
+		for (int i = 0; i < taxaNames.length; i++) {
+			if (taxonName.equals(taxaNames[i])) {
+				return i;
+			}
+		}
+		throw new IllegalArgumentException("Taxon " + taxonName + " not found in tree");
+	}
 	protected void addToPartition(Node node, Set<Integer> values) {
 		if (node.isLeaf()) {
 			return;

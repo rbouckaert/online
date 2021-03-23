@@ -62,7 +62,7 @@ import beast.util.Randomizer;
 
 @Description("Randomly selects true internal tree node (i.e. not the root) and move node height uniformly in interval " +
         "restricted by the nodes parent and children.")
-public class UniformOnPartition extends TreeOperator {
+public class UniformOnPartition extends TreeOperator implements PartitionOperator {
 	final public Input<TreePartition> partitionInput = new Input<>("partition", "specifies part of the tree to be operated on");
 	TreePartition partition;
 	

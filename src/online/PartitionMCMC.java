@@ -32,12 +32,16 @@ public class PartitionMCMC extends MCMC {
 
 	@Override
 	public void run() throws IOException, SAXException, ParserConfigurationException {
+		
         // set up state (again). Other beastObjects may have manipulated the
         // StateNodes, e.g. set up bounds or dimensions
         state.initAndValidate();
 
         burnIn = burnInInput.get();
         chainLength = chainLengthInput.get();
+		if (operatorSchedule instanceof AfterburnOperatorSchedule) {
+			((AfterburnOperatorSchedule)operatorSchedule).reset(chainLength/2);
+		}
         state.setEverythingDirty(true);
         posterior = posteriorInput.get();
 
