@@ -16,6 +16,9 @@ public class TreePartition extends BEASTObject {
 	Integer [] partition;
 	TreeInterface tree;
 	
+	public TreePartition() {
+	}
+	
 	public TreePartition(TreeInterface tree, IntegerParameter partition) {
 		initByName("tree", tree, "partition", partition);
 	}

@@ -2,7 +2,7 @@ package online;
 
 
 
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -35,6 +35,7 @@ import beast.evolution.tree.TraitSet;
 import beast.evolution.tree.Tree;
 import beast.util.XMLParser;
 import beast.util.XMLParserException;
+import beast.util.XMLProducer;
 
 //TODO: take rates in account
 //TODO: take group sizes in account
@@ -60,7 +61,7 @@ public class BaseStateExpander extends beast.core.Runnable {
 	}
 
 	
-	protected void updateState(Model model1, Model model2) throws IOException, SAXException, ParserConfigurationException {
+	protected void updateState(Model model1, Model model2) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		// copy pare of the state that model1 and model2 have in common
 		copyCommonStateNodes(model1, model2);
 		
@@ -194,7 +195,7 @@ public class BaseStateExpander extends beast.core.Runnable {
 		return nr[0];
 	}
 
-	protected void positionAdditions(Model model2, String taxon) throws IOException, SAXException, ParserConfigurationException {
+	protected void positionAdditions(Model model2, String taxon) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		// adding a single taxon
 		State state = model2.state;
 		Distribution posterior = model2.posterior;
@@ -227,8 +228,9 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	/** run short MCMC chain on subset of nodes aroun newTaxon 
 	 * @throws ParserConfigurationException 
 	 * @throws SAXException 
-	 * @throws IOException **/
-	protected void runAfterBurn(Model model, Node newTaxon) throws IOException, SAXException, ParserConfigurationException {
+	 * @throws IOException 
+	 * @throws XMLParserException **/
+	protected void runAfterBurn(Model model, Node newTaxon) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		
 		TreePartition partition = determinePartition(model, newTaxon);
 		// add partition operators
@@ -237,12 +239,31 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
 		op2.setID("UniformOnPartition");
 		List<Operator> operators = new ArrayList<>();
-		// operators.add(op1);
+		operators.add(op1);
 		operators.add(op2);
 		
-		MCMC mcmc = newMCMC(model.mcmc, operators, model.tree);
-		mcmc.run();
+		MCMC mcmc = newMCMC(model, operators, model.tree);
+		XMLProducer producer = new XMLProducer();
+		String xml = producer.toRawXML(mcmc);
+		xml = xml.replaceAll("'beast.core.MCMC'", "'online.PartitionMCMC'");
 		
+		PrintStream out = new PrintStream(new File("/tmp/beast.xml"));
+		out.println(xml);
+		out.close();
+		
+		
+		XMLParser parser = new XMLParser();
+		mcmc = (MCMC) parser.parseBareFragment(xml, true);
+		((PartitionMCMC)mcmc).initState(model.state.toXML(0));
+		
+		mcmc.run();
+		State state = mcmc.startStateInput.get();
+		State other = model.state;
+		for (int i = 0; i < state.getNrOfStateNodes(); i++) {
+			StateNode s1 = other.getStateNode(i);
+			StateNode s2 = state.getStateNode(i);
+			s1.assignFrom(s2);
+		}
 	}
 	
 	/**
@@ -250,15 +271,16 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	 * TODO: need rate operators as well?
 	 * @return
 	 */
-	private MCMC newMCMC(MCMC other, List<Operator> operators, Tree tree) {
+	private MCMC newMCMC(Model model, List<Operator> operators, Tree tree) {
 		
 		Logger screenlog = new Logger();
-		screenlog.initByName("log", other.posteriorInput.get(), "logEvery", (int)(long) chainLengthInput.get());
+		screenlog.initByName("log", model.mcmc.posteriorInput.get(), "logEvery", (int)(long) chainLengthInput.get());
 
-		MCMC mcmc = new PartitionMCMC(tree); 
+		MCMC mcmc = new MCMC(); 
 		
 		mcmc.initByName(
-				"distribution", other.posteriorInput.get(), 
+				"distribution", model.mcmc.posteriorInput.get(),
+				"state", model.mcmc.startStateInput.get(),
 				"chainLength", chainLengthInput.get(),
 				"operator", operators,
 				"logger", screenlog,

@@ -71,6 +71,9 @@ public class ExchangeOnPartition extends TreeOperator {
 
 	TreePartition partition;
 
+	public ExchangeOnPartition() {		
+	}
+	
     public ExchangeOnPartition(TreeInterface tree, TreePartition partition, double weight) {
 		initByName("tree", tree, "partition", partition, "weight", weight);
 	}
