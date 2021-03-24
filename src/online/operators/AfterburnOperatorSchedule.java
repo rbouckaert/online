@@ -1,4 +1,4 @@
-package online;
+package online.operators;
 
 import beast.core.Description;
 import beast.core.Operator;

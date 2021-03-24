@@ -259,7 +259,8 @@ public class TraceExpander extends BaseStateExpander {
 		}
 		
 		Distribution p = model2.mcmc.posteriorInput.get();
-		double logP2 = model2.state.robustlyCalcPosterior(p);
+//		double logP2 = 
+		model2.state.robustlyCalcPosterior(p);
 		
 //		double logP = p.getCurrentLogP();
 //		System.err.println(logP + " - " + logP2 + " = " + (logP - logP2));

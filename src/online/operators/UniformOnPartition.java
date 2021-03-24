@@ -47,7 +47,7 @@
  * Boston, MA  02110-1301  USA
  */
 
-package online;
+package online.operators;
 
 import java.text.DecimalFormat;
 

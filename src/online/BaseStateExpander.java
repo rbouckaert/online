@@ -36,9 +36,19 @@ import beast.evolution.tree.Tree;
 import beast.util.XMLParser;
 import beast.util.XMLParserException;
 import beast.util.XMLProducer;
+import online.operators.AfterburnOperatorSchedule;
+import online.operators.ExchangeOnPartition;
+import online.operators.TreePartition;
+import online.operators.UniformOnPartition;
 
 //TODO: take rates in account
 //TODO: take group sizes in account
+//TODO: figure out a way to automatically determine chain length, perhaps based on 
+//TODO: resume after burn = TraceExpander with xml1 = xml2, proportionPartitioned = 0 & swap output multiState files
+//TODO: what makes good proportionPartitioned?
+//TODO: WCSS with 32 taxa, 1 taxon removed
+//TODO: WCSS with 32 taxa, 5 taxa removed
+//TODO: WCSS with 32 taxa, 10 taxa removed
 
 @Description("Base class for create a new state extending an input state with different set of taxa")
 public class BaseStateExpander extends beast.core.Runnable {
@@ -281,8 +291,7 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	}
 	
 	/**
-	 * build up MCMC object with appropriate tree operators
-	 * TODO: need rate operators as well?
+	 * build up MCMC object including appropriate PartitionOperators
 	 * @return
 	 * @throws XMLParserException 
 	 */
@@ -297,6 +306,8 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		operators.add(op1);
 		operators.add(op2);
 		operators.addAll(model.mcmc.operatorsInput.get());
+		
+		// TODO: add RateScale operator if required
 
 //		double sumWeight = 0;
 //		for (Operator op : model.mcmc.operatorsInput.get()) {

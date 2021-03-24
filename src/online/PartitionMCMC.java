@@ -10,6 +10,7 @@ import org.xml.sax.SAXException;
 
 import beast.core.*;
 import beast.core.util.Log;
+import online.operators.AfterburnOperatorSchedule;
 
 @Description("Perform MCMC on a partition of the tree -- this assumes that "
 		+ "no screen loggin or file logging is required")
