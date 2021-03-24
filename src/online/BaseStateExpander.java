@@ -45,15 +45,10 @@ import online.operators.UniformOnPartition;
 //TODO: take group sizes in account
 //TODO: figure out a way to automatically determine chain length, perhaps based on 
 //TODO: resume after burn = TraceExpander with xml1 = xml2, proportionPartitioned = 0 & swap output multiState files
-//TODO: what makes good proportionPartitioned?
-//TODO: WCSS with 32 taxa, 1 taxon removed
-//TODO: WCSS with 32 taxa, 5 taxa removed
-//TODO: WCSS with 32 taxa, 10 taxa removed
 
 @Description("Base class for create a new state extending an input state with different set of taxa")
 public class BaseStateExpander extends beast.core.Runnable {
 	final public Input<XMLFile> xml1Input = new Input<>("xml1", "BEAST XML file with initial state", new XMLFile("[[none]]"));
-	final public Input<XMLFile> xml2Input = new Input<>("xml2", "BEAST XML file with expanded state", new XMLFile("[[none]]"));
 	
 	final public Input<Long> chainLengthInput = new Input<>("chainLength", "Length of the MCMC chain used after placement of taxa", 1000L);
 	final public Input<Double> proportionPartitionedInput = new Input<>("proportionPartitioned", "proportion of MCMC chain only using operators local to the part of the tree that changed", 0.5);
@@ -296,32 +291,25 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	 * @throws XMLParserException 
 	 */
 	private MCMC newMCMC(Model model, List<String> additions) throws XMLParserException { //List<Operator> operators, Tree tree) {
-		TreePartition partition = determinePartition(model, additions);
-		// add partition operators
-		ExchangeOnPartition op1 = new ExchangeOnPartition(model.tree, partition, 1.0);
-		op1.setID("ExchangeOnPartition");
-		UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
-		op2.setID("UniformOnPartition");
 		List<Operator> operators = new ArrayList<>();
-		operators.add(op1);
-		operators.add(op2);
-		operators.addAll(model.mcmc.operatorsInput.get());
-		
-		// TODO: add RateScale operator if required
 
-//		double sumWeight = 0;
-//		for (Operator op : model.mcmc.operatorsInput.get()) {
-//			//if (!(op instanceof TreeOperator)) {
-//				sumWeight += op.m_pWeight.get();
-//			//}
-//		}
-//		for (Operator op : model.mcmc.operatorsInput.get()) {
-//			//if (!(op instanceof TreeOperator)) {
-//				operators.add(op);
-//			//	op.m_pWeight.setValue(op.m_pWeight.get() / (sumWeight * 10 + 4), op);
-//			//}
-//		}
-		
+		TreePartition partition = determinePartition(model, additions);		
+		if (partition.size() != 0) {
+			// add partition operators
+			ExchangeOnPartition op1 = new ExchangeOnPartition(model.tree, partition, 1.0);
+			op1.setID("ExchangeOnPartition");
+			UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
+			op2.setID("UniformOnPartition");
+			operators.add(op1);
+			operators.add(op2);
+
+			// TODO: add RateScale operator if required
+		} else {
+			// set proportion partitioned operators to zero
+			proportionPartitionedInput.setValue(0.0, this);
+		}
+		operators.addAll(model.mcmc.operatorsInput.get());
+
 		
 		Logger screenlog = new Logger();
 		screenlog.initByName("log", model.mcmc.posteriorInput.get(), "logEvery", (int)(long) chainLengthInput.get());

@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 
 import beast.app.util.Application;
+import beast.app.util.XMLFile;
 import beast.core.*;
 import beast.core.util.Log;
 import beast.util.Randomizer;
@@ -12,6 +13,7 @@ import beast.util.Randomizer;
 public class StateExpander extends BaseStateExpander {
 	final public Input<File> stateFileInput = new Input<>("stateFile", "state file associated with initial XML file (xml1). "
 			+ "If not specified, use xml1+\".state\"", new File("[[none]]"));
+	final public Input<XMLFile> xml2Input = new Input<>("xml2", "BEAST XML file with expanded state", new XMLFile("[[none]]"));
 	
 
 	@Override

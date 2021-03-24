@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -16,6 +17,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import org.xml.sax.SAXException;
 
 import beast.app.util.Application;
+import beast.app.util.XMLFile;
 import beast.core.Description;
 import beast.core.Distribution;
 import beast.core.Input;
@@ -29,6 +31,7 @@ import beast.util.XMLParserException;
 
 @Description("Create tree and trace files extending an input multiple-state file with different set of taxa")
 public class TraceExpander extends BaseStateExpander {
+	final public Input<XMLFile> xml2Input = new Input<>("xml2", "BEAST XML file with expanded state. If not specified, xml2 is set equal to xml1, and we are resuming", new XMLFile("[[none]]"));
 	final public Input<File> multiStateFileInput = new Input<>("multiStateFile", "state file containing multiple states associated with initial XML file (xml1)."
 			+ "If not specified, use xml1+\".state.multi\"", new File("[[none]]"));
 	
@@ -86,7 +89,16 @@ public class TraceExpander extends BaseStateExpander {
 		}
 		
 		// import models
-		model2 = getModelFromFile(xml2Input.get());
+		boolean usesTmpMultiStateFile = false;
+		if (xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]")) {
+			// if not specified, assume we are resuming
+			model2 = getModelFromFile(xml1Input.get());
+			multiStateOut = new PrintStream(xml1Input.get().getAbsolutePath() + ".state.multi.tmp");
+			usesTmpMultiStateFile = true;
+		} else {
+			model2 = getModelFromFile(xml2Input.get());
+			multiStateOut = new PrintStream(xml2Input.get().getAbsolutePath() + ".state.multi");
+		}
 		Object o = model2.mcmc.getInput("logger").get();
 		if (o instanceof List<?>) {
 			loggers = (List<Logger>) o;
@@ -98,7 +110,6 @@ public class TraceExpander extends BaseStateExpander {
 			logger.initAndValidate();
 			logger.init();
 		}
-		multiStateOut = new PrintStream(xml2Input.get().getAbsolutePath() + ".state.multi");
 
 		int n = getStateCount();
 		sampleNr = 0;
@@ -125,6 +136,16 @@ public class TraceExpander extends BaseStateExpander {
 		for (Logger logger : loggers) {
 			logger.close();
 		}
+		
+		
+		if (usesTmpMultiStateFile) {
+			Files.move(
+					new File(xml1Input.get().getAbsolutePath() + ".state.multi.tmp").toPath(), 
+					new File(xml1Input.get().getAbsolutePath() + ".state.multi").toPath(),
+					java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+		}
+		
+		
 		Long end = System.currentTimeMillis();
 		Log.info("Done in " + (end-start)/1000 + " seconds");
 		System.exit(0);
@@ -145,7 +166,10 @@ public class TraceExpander extends BaseStateExpander {
             try {
             	BaseStateExpander expander = new BaseStateExpander(chainLengthInput.get());
         		Model model1 = getModelFromFile(xml1Input.get());
-        		Model model2 = getModelFromFile(xml2Input.get());
+        		Model model2 = getModelFromFile(
+        				xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]") ? 
+        				xml1Input.get():
+        				xml2Input.get());
         		// restore operator settings, if possible
         		String stateFile = stateFileInput.get().getPath();
         		if (stateFile == null || stateFile.equals("[[none]]")) {

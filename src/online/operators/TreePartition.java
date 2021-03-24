@@ -47,5 +47,9 @@ public class TreePartition extends BEASTObject {
 		}
 		return -1;
 	}
+
+	public int size() {
+		return partition.length;
+	}
 	
 }
