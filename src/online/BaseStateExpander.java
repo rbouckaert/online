@@ -41,17 +41,17 @@ import online.operators.ExchangeOnPartition;
 import online.operators.TreePartition;
 import online.operators.UniformOnPartition;
 
-//TODO: take rates in account
-//TODO: take group sizes in account
-//TODO: figure out a way to automatically determine chain length, perhaps based on 
-//TODO: resume after burn = TraceExpander with xml1 = xml2, proportionPartitioned = 0 & swap output multiState files
+//TODO: take rates in account in estimated parameters
+//TODO: take group sizes in account in estimated parameters
+//TODO: figure out a way to automatically determine chain length, perhaps based on the Gelman Rubin statistic
 
 @Description("Base class for create a new state extending an input state with different set of taxa")
 public class BaseStateExpander extends beast.core.Runnable {
 	final public Input<XMLFile> xml1Input = new Input<>("xml1", "BEAST XML file with initial state", new XMLFile("[[none]]"));
 	
 	final public Input<Long> chainLengthInput = new Input<>("chainLength", "Length of the MCMC chain used after placement of taxa", 1000L);
-	final public Input<Double> proportionPartitionedInput = new Input<>("proportionPartitioned", "proportion of MCMC chain only using operators local to the part of the tree that changed", 0.5);
+	final public Input<Double> proportionPartitionedInput = new Input<>("proportionPartitioned", "proportion of MCMC chain only using operators local to the part of the tree that changed. "
+			+ "If no additional sequences are deteceted this is set to 0.", 0.75);
 	
 	final public Input<Long> seedInput = new Input<>("seed", "Specify a random number generator seed");
 

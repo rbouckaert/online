@@ -42,6 +42,12 @@ public class TraceExpander extends BaseStateExpander {
     final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of trees to used as burn-in (and will be ignored)", 10);
     final public Input<Boolean> overwriteInput = new Input<>("overwrite", "overwrite existing tree and trace files", true);
 
+	public final Input<String> tempDirInput = new Input<>("tempDir","directory where temporary files are written", "/tmp/");
+	public final Input<Double> maxRInput = new Input<>("maxR", "maximum acceptable value of Gelman Rubin statistic."
+			+ "The chain keeps afterburning (with chainLength steps) till all items in trace log converge. "
+			+ "Set to less than 1 to stop after first cycle.", 1.05);
+    
+    
     private int nrOfThreads;
     private static ExecutorService exec;
     private static CountDownLatch countDown;
@@ -51,16 +57,70 @@ public class TraceExpander extends BaseStateExpander {
 	private BufferedReader fin;
 	private String multiStateFile;
 	private PrintStream multiStateOut;
+	private boolean autoConverge;
 
 	@Override
 	public void initAndValidate() {
 	}
 	
-	@SuppressWarnings("unchecked")
 	@Override
 	public void run() throws Exception {
 		Long start = System.currentTimeMillis();
+
 //		Log.setLevel(Log.Level.debug);
+		initialise();
+		
+		
+		boolean isResuming = importModels();
+
+		int n = getStateCount();
+		int burnIn = skipBurnin(isResuming, n);
+		
+		
+		initLoggers(0);
+		
+		
+		sampleNr = 0;
+		if (nrOfThreads == 1) {
+			processUnThreaded(n - burnIn);
+		} else {
+			// split work over k threads, with work for (n - burnIn)/k states each
+			processThreaded(n - burnIn);
+		}
+		
+		close(isResuming);
+		
+		Long end = System.currentTimeMillis();
+		Log.info("Done in " + (end-start)/1000 + " seconds with " + nrOfThreads + " threads");
+		System.exit(0);
+	}
+
+	
+	@SuppressWarnings("unchecked")
+	private void initLoggers(int cycle) throws IOException {
+		Object o = model2.mcmc.getInput("logger").get();
+		if (o instanceof List<?>) {
+			loggers = (List<Logger>) o;
+		} else {
+			throw new IllegalArgumentException("Expected list of loggers in XML2");
+		}
+
+		for (Logger logger : loggers) {
+			logger.everyInput.setValue(1, logger);
+			String fileName = logger.fileNameInput.get();
+			if (fileName != null) {
+				if (fileName.indexOf(File.pathSeparator) > 0) {
+					fileName = fileName.substring(fileName.lastIndexOf(File.pathSeparator) + 1);
+					fileName = tempDirInput.get() + File.pathSeparator + "cycle" + cycle + "_" + fileName;
+					logger.fileNameInput.setValue(fileName, logger);
+				}
+			}
+			logger.initAndValidate();
+			logger.init();
+		}
+	}
+
+	private void initialise() {
 		if (overwriteInput.get()) {
 			Logger.FILE_MODE = LogFileMode.overwrite;
 		} else {
@@ -78,8 +138,11 @@ public class TraceExpander extends BaseStateExpander {
 		if (seedInput.get() != null) {
 			Randomizer.setSeed(seedInput.get());
 		}
-
 		
+		autoConverge = maxRInput.get() > 1.0;
+	}
+
+	private boolean importModels() throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		multiStateFile = multiStateFileInput.get().getPath();
 		if (multiStateFile == null || multiStateFile.equals("[[none]]")) {
 			multiStateFile = xml1Input.get().getPath() + ".state.multi"; 
@@ -87,72 +150,52 @@ public class TraceExpander extends BaseStateExpander {
 		if (!new File(multiStateFile).exists()) {
 			throw new IllegalArgumentException("Could not find state file " + multiStateFile);
 		}
-		
 		// import models
-		boolean usesTmpMultiStateFile = false;
+		boolean isResuming = false;
 		if (xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]")) {
 			// if not specified, assume we are resuming
 			model2 = getModelFromFile(xml1Input.get());
 			multiStateOut = new PrintStream(xml1Input.get().getAbsolutePath() + ".state.multi.tmp");
-			usesTmpMultiStateFile = true;
+			isResuming = true;
 		} else {
 			model2 = getModelFromFile(xml2Input.get());
 			multiStateOut = new PrintStream(xml2Input.get().getAbsolutePath() + ".state.multi");
 		}
-		Object o = model2.mcmc.getInput("logger").get();
-		if (o instanceof List<?>) {
-			loggers = (List<Logger>) o;
-		} else {
-			throw new IllegalArgumentException("Expected list of loggers in XML2");
-		}
-		for (Logger logger : loggers) {
-			logger.everyInput.setValue(1, logger);
-			logger.initAndValidate();
-			logger.init();
-		}
+		return isResuming;
+	}
 
-		int n = getStateCount();
-		sampleNr = 0;
-
-		// skip burn-in states
-        fin = new BufferedReader(new FileReader(multiStateFile));
-		int burnIn = burnInPercentageInput.get() * n / 100;
-		if (burnIn > 0) {
-			Log.info("Skipping " + burnIn + " states as burn-in");
-		}
-		for (int i = 0; i < burnIn; i++) {
-			nextState();
-		}
-		
-		
-		if (nrOfThreads == 1) {
-			processUnThreaded(n - burnIn);
-		} else {
-			// split work over k threads, with work for (n - burnIn)/k states each
-			processThreaded(n - burnIn);
-		}
+	private void close(boolean isResuming) throws IOException {
 		fin.close();
 
 		for (Logger logger : loggers) {
 			logger.close();
 		}
 		
-		
-		if (usesTmpMultiStateFile) {
+		if (isResuming) {
 			Files.move(
 					new File(xml1Input.get().getAbsolutePath() + ".state.multi.tmp").toPath(), 
 					new File(xml1Input.get().getAbsolutePath() + ".state.multi").toPath(),
 					java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 		}
-		
-		
-		Long end = System.currentTimeMillis();
-		Log.info("Done in " + (end-start)/1000 + " seconds");
-		System.exit(0);
+
+		exec.shutdownNow();
 	}
 
-	
-    class CoreRunnable implements Runnable {
+	// skip burn-in states
+    private int skipBurnin(boolean isResuming, int n) throws IOException {
+        fin = new BufferedReader(new FileReader(multiStateFile));
+		int burnIn = isResuming ? 0 : burnInPercentageInput.get() * n / 100;
+		if (burnIn > 0) {
+			Log.info("Skipping " + burnIn + " states as burn-in");
+		}
+		for (int i = 0; i < burnIn; i++) {
+			nextState();
+		}
+		return burnIn;
+	}
+
+
+	class CoreRunnable implements Runnable {
     	int from; 
     	int to;
 
