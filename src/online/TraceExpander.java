@@ -16,6 +16,7 @@ import javax.xml.parsers.ParserConfigurationException;
 
 import org.xml.sax.SAXException;
 
+import beast.app.tools.LogCombiner;
 import beast.app.util.Application;
 import beast.app.util.XMLFile;
 import beast.core.Description;
@@ -26,6 +27,7 @@ import beast.core.Logger.LogFileMode;
 import beast.core.State;
 import beast.core.StateNode;
 import beast.core.util.Log;
+import beast.util.LogAnalyser;
 import beast.util.Randomizer;
 import beast.util.XMLParserException;
 
@@ -71,24 +73,29 @@ public class TraceExpander extends BaseStateExpander {
 		initialise();
 		
 		
-		boolean isResuming = importModels();
-
-		int n = getStateCount();
-		int burnIn = skipBurnin(isResuming, n);
-		
-		
-		initLoggers(0);
-		
-		
-		sampleNr = 0;
-		if (nrOfThreads == 1) {
-			processUnThreaded(n - burnIn);
-		} else {
-			// split work over k threads, with work for (n - burnIn)/k states each
-			processThreaded(n - burnIn);
-		}
-		
-		close(isResuming);
+		int cycle = 0;
+		do {
+			boolean isResuming = importModels();
+	
+			int n = getStateCount();
+			int burnIn = skipBurnin(isResuming, n);
+			
+			initLoggers(cycle);
+			
+			sampleNr = 0;
+			if (nrOfThreads == 1) {
+				processUnThreaded(n - burnIn);
+			} else {
+				// split work over k threads, with work for (n - burnIn)/k states each
+				processThreaded(n - burnIn);
+			}
+			
+			close(isResuming, cycle);
+			
+			// prep for next cycle
+			cycle++;
+			xml2Input.setValue(null, this);
+		} while (!converged(cycle));
 		
 		Long end = System.currentTimeMillis();
 		Log.info("Done in " + (end-start)/1000 + " seconds with " + nrOfThreads + " threads");
@@ -96,6 +103,83 @@ public class TraceExpander extends BaseStateExpander {
 	}
 
 	
+	private boolean converged(int cycle) throws IOException {
+		if (!autoConverge) {
+			return true;
+		}
+		if (cycle == 1) {
+			// need at least two log files
+			return false;
+		}
+		
+		double maxR = Double.MIN_VALUE;
+		for (Logger logger : loggers) {
+			if (!logger.isLoggingToStdout() && logger.mode == Logger.LOGMODE.compound) {
+				String fileName1 = getFilename(logger.fileNameInput.get(), cycle-1);
+				String fileName2 = getFilename(logger.fileNameInput.get(), cycle-2);
+				maxR = Math.max(maxR, calcGRStats(fileName1, fileName2));
+			}
+ 		}
+		
+		return maxR < maxRInput.get();
+	}
+
+	private double calcGRStats(String fileName1, String fileName2) throws IOException {
+		Double [][] trace1 = new LogAnalyser(fileName1, 0, true, false).getTraces();
+		Double [][] trace2 = new LogAnalyser(fileName2, 0, true, false).getTraces();
+		double maxR = Double.MIN_VALUE;
+		for (int i = 1; i < trace1.length; i++) {
+			double R = calcGRStat(trace1[i], trace2[i]);
+			maxR = Math.max(maxR, R);
+		}
+		return maxR;
+	}
+
+	private double calcGRStat(Double[] trace1, Double[] trace2) {
+		
+		// calc means and squared means
+		double sum1 = 0, sum2 = 0, sumsq1 = 0, sumsq2 = 0;
+		for (Double d : trace1) {
+			sum1 += d;
+			sumsq1 += d * d;
+		}
+		for (Double d : trace2) {
+			sum2 += d;
+			sumsq2 += d * d;
+		}
+		
+		// sum to get totals
+		double totalMean = (sum1 + sum2);
+		double totalSq = (sumsq1 + sumsq2);
+		
+		
+		// calculate variances for all (including total counts)
+		double var1 = sumsq1 - sum1 * sum1;
+		double var2 = sumsq2 - sum2 * sum2;
+		
+		// average variance for this item
+		double fW = ((var1 + var2) / 2) / (trace1.length - 1);
+
+		// variance for joint
+		double fB = (totalSq - totalMean * totalMean) / (2 * trace1.length - 1);
+		
+		double R = fB/fW;
+		return R;
+	}
+
+	private String getFilename(String fileName, int cycle) {
+		if (fileName != null && autoConverge) {
+			if (fileName.indexOf(File.pathSeparator) > 0) {
+				fileName = fileName.substring(fileName.lastIndexOf(File.pathSeparator) + 1);
+				if (fileName.startsWith("cycle") && fileName.indexOf("_") > 0) {
+					fileName = fileName.substring(fileName.indexOf("_") + 1);
+				}
+				fileName = tempDirInput.get() + File.pathSeparator + "cycle" + cycle + "_" + fileName;
+			}
+		}
+		return fileName;
+	}
+
 	@SuppressWarnings("unchecked")
 	private void initLoggers(int cycle) throws IOException {
 		Object o = model2.mcmc.getInput("logger").get();
@@ -107,13 +191,9 @@ public class TraceExpander extends BaseStateExpander {
 
 		for (Logger logger : loggers) {
 			logger.everyInput.setValue(1, logger);
-			String fileName = logger.fileNameInput.get();
-			if (fileName != null) {
-				if (fileName.indexOf(File.pathSeparator) > 0) {
-					fileName = fileName.substring(fileName.lastIndexOf(File.pathSeparator) + 1);
-					fileName = tempDirInput.get() + File.pathSeparator + "cycle" + cycle + "_" + fileName;
-					logger.fileNameInput.setValue(fileName, logger);
-				}
+			if (autoConverge && !logger.isLoggingToStdout()) {
+				String fileName = getFilename(logger.fileNameInput.get(), cycle);
+				logger.fileNameInput.setValue(fileName, logger);
 			}
 			logger.initAndValidate();
 			logger.init();
@@ -164,7 +244,7 @@ public class TraceExpander extends BaseStateExpander {
 		return isResuming;
 	}
 
-	private void close(boolean isResuming) throws IOException {
+	private void close(boolean isResuming, int cycle) throws IOException {
 		fin.close();
 
 		for (Logger logger : loggers) {
@@ -177,8 +257,24 @@ public class TraceExpander extends BaseStateExpander {
 					new File(xml1Input.get().getAbsolutePath() + ".state.multi").toPath(),
 					java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 		}
-
-		exec.shutdownNow();
+		
+		if (autoConverge) {
+			for (Logger logger : loggers) {
+				if (!logger.isLoggingToStdout()) {
+					String from1 = getFilename(logger.fileNameInput.get(), cycle-1);
+					String from2 = getFilename(logger.fileNameInput.get(), cycle);
+					String to = logger.fileNameInput.get();
+					to = to.substring(to.lastIndexOf(File.pathSeparator) + 1);
+					if (to.startsWith("cycle") && to.indexOf("_") > 0) {
+						to = to.substring(to.indexOf("_") + 1);
+					}
+					LogCombiner.main(new String[]{
+							"-b", "0", "-log", from1, "-log", from2, "-o", to
+					   });
+				}
+			}
+		}
+		
 	}
 
 	// skip burn-in states
