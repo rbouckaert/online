@@ -41,10 +41,9 @@ public class TraceExpander extends BaseStateExpander {
 			+ "If not specified, use xml1+\".state\". If that does not exist, ignore.", new File("[[none]]"));
 
     final public Input<Integer> maxNrOfThreadsInput = new Input<>("threads","maximum number of threads to use, if not specified the number of available cores is used (default)");
-    final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of trees to used as burn-in (and will be ignored)", 10);
+    final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of states in multiStateFile to be used as burn-in (these will be ignored)", 10);
     final public Input<Boolean> overwriteInput = new Input<>("overwrite", "overwrite existing tree and trace files", true);
 
-	public final Input<String> tempDirInput = new Input<>("tempDir","directory where temporary files are written", "/tmp/");
 	/**
 	 * https://www.stata.com/new-in-stata/gelman-rubin-convergence-diagnostic/
 	 * " Gelman and Rubin (1992) and Brooks and Gelman (1998) suggest that diagnostic Rc values greater than 1.2 for 
@@ -52,10 +51,18 @@ public class TraceExpander extends BaseStateExpander {
 	 *   often used to declare convergence."
 	 *   But even 1.1 is often too low (https://arxiv.org/pdf/1812.09384.pdf) and 1.01 makes more sense. 
 	 */
-	public final Input<Double> maxRInput = new Input<>("maxR", "maximum acceptable value of Gelman Rubin statistic."
+    final public Input<Double> maxRInput = new Input<>("maxR", "maximum acceptable value of Gelman Rubin statistic."
 			+ "The chain keeps afterburning (with chainLength steps) till all items in trace log converge. "
 			+ "Set to less than 1 to stop after first cycle.", 1.01);
-    final public Input<Boolean> useSplitRInput = new Input<>("useSplitR", "use split-R estimate instead of original Gelman-Rubin statistic", true);
+	final public Input<String> tempDirInput = new Input<>("tempDir","directory where temporary files are written."
+			+ "(Ignored if maxRInput < 1).", "/tmp/");
+	
+	enum ConvergenceCriterion {GR, SplitR, KS}
+    final public Input<ConvergenceCriterion> criterionInput = new Input<>("criterion", "Criterion for testig convergence:"
+    		+ "GR for Gelman-Rubin statistic, "
+    		+ "SplitR for use split-R estimate of Gelman-Rubin statistic, "
+    		+ "KS for Kolmogorov Smirnov test at p=5% "
+    		+ "(Ignored if maxRInput < 1).", ConvergenceCriterion.SplitR, ConvergenceCriterion.values());
     
     
     private int nrOfThreads;
@@ -68,6 +75,7 @@ public class TraceExpander extends BaseStateExpander {
 	private String multiStateFile;
 	private PrintStream multiStateOut;
 	private boolean autoConverge;
+	private ConvergenceCriterion criterion;
 
 	@Override
 	public void initAndValidate() {
@@ -76,7 +84,8 @@ public class TraceExpander extends BaseStateExpander {
 	@Override
 	public void run() throws Exception {
 		Long start = System.currentTimeMillis();
-
+		criterion = criterionInput.get();
+		
 //		Log.setLevel(Log.Level.debug);
 		initialise();
 		
@@ -120,32 +129,65 @@ public class TraceExpander extends BaseStateExpander {
 			return false;
 		}
 		
-		double maxR = Double.MIN_VALUE;
+		double maxStat = Double.MIN_VALUE;
 		for (Logger logger : loggers) {
 			if (!logger.isLoggingToStdout() && logger.mode == Logger.LOGMODE.compound) {
 				String fileName1 = getFilename(logger.fileNameInput.get(), cycle-1);
 				String fileName2 = getFilename(logger.fileNameInput.get(), cycle-2);
-				maxR = Math.max(maxR, calcGRStats(fileName1, fileName2));
+				maxStat = Math.max(maxStat, calcStats(fileName1, fileName2));
 			}
  		}
 		
-		return maxR < maxRInput.get();
+		switch (criterion) {
+			case GR:
+			case SplitR:
+				return maxStat < maxRInput.get();
+			case KS:
+				return maxStat < 0.05;
+		}
+		return true;
 	}
 
-	private double calcGRStats(String fileName1, String fileName2) throws IOException {
+	private double calcStats(String fileName1, String fileName2) throws IOException {
 		Double [][] trace1 = new LogAnalyser(fileName1, 0, true, false).getTraces();
 		Double [][] trace2 = new LogAnalyser(fileName2, 0, true, false).getTraces();
 		double maxR = Double.MIN_VALUE;
 		for (int i = 1; i < trace1.length; i++) {
-			double R = useSplitRInput.get()? 
-					calcSplitGRStat(trace1[i], trace2[i]):
-					calcGRStat(trace1[i], trace2[i]);
+			double R = maxR;
+			switch (criterion) {
+			case GR:
+				R = calcGRStat(trace1[i], trace2[i]);
+				break;
+			case SplitR:
+				R =	calcSplitGRStat(trace1[i], trace2[i]);
+				break;
+			case KS:
+				R = calsKSState(trace1[i], trace2[i]);
+				break;
+			}
 			maxR = Math.max(maxR, R);
 		}
 		return maxR;
 	}
 
-	/** original Gelman Rubin statistic for 2 chains **/
+	private double calsKSState(Double[] trace1, Double[] trace2) {
+		double [] x0 = toDouble(trace1);
+		double [] y0 = toDouble(trace2);
+		
+		KolmogorovSmirnovTest test = new KolmogorovSmirnovTest();
+		double p = test.kolmogorovSmirnovTest(x0, y0);
+		return 0;
+	}
+
+	private double[] toDouble(Double[] x) {
+		double [] x0 = new double[x.length];
+		for (int i = 0; i < x.length; i++) {
+			x0[i] = x[i];
+		}
+		return x0;
+	}
+
+	/** original Gelman Rubin statistic for 2 chains **/	
 	private double calcGRStat(Double[] trace1, Double[] trace2) {
 		double sampleCount = trace1.length;
 		if (trace2.length != sampleCount) {
