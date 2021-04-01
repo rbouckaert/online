@@ -45,9 +45,17 @@ public class TraceExpander extends BaseStateExpander {
     final public Input<Boolean> overwriteInput = new Input<>("overwrite", "overwrite existing tree and trace files", true);
 
 	public final Input<String> tempDirInput = new Input<>("tempDir","directory where temporary files are written", "/tmp/");
+	/**
+	 * https://www.stata.com/new-in-stata/gelman-rubin-convergence-diagnostic/
+	 * " Gelman and Rubin (1992) and Brooks and Gelman (1998) suggest that diagnostic Rc values greater than 1.2 for 
+	 *   any of the model parameters should indicate nonconvergence. In practice, a more stringent rule of Rc < 1.1 is 
+	 *   often used to declare convergence."
+	 *   But even 1.1 is often too low (https://arxiv.org/pdf/1812.09384.pdf) and 1.01 makes more sense. 
+	 */
 	public final Input<Double> maxRInput = new Input<>("maxR", "maximum acceptable value of Gelman Rubin statistic."
 			+ "The chain keeps afterburning (with chainLength steps) till all items in trace log converge. "
-			+ "Set to less than 1 to stop after first cycle.", 1.05);
+			+ "Set to less than 1 to stop after first cycle.", 1.01);
+    final public Input<Boolean> useSplitRInput = new Input<>("useSplitR", "use split-R estimate instead of original Gelman-Rubin statistic", true);
     
     
     private int nrOfThreads;
@@ -129,44 +137,112 @@ public class TraceExpander extends BaseStateExpander {
 		Double [][] trace2 = new LogAnalyser(fileName2, 0, true, false).getTraces();
 		double maxR = Double.MIN_VALUE;
 		for (int i = 1; i < trace1.length; i++) {
-			double R = calcGRStat(trace1[i], trace2[i]);
+			double R = useSplitRInput.get()? 
+					calcSplitGRStat(trace1[i], trace2[i]):
+					calcGRStat(trace1[i], trace2[i]);
 			maxR = Math.max(maxR, R);
 		}
 		return maxR;
 	}
 
+	/** original Gelman Rubin statistic for 2 chains **/
 	private double calcGRStat(Double[] trace1, Double[] trace2) {
+		double sampleCount = trace1.length;
+		if (trace2.length != sampleCount) {
+			throw new IllegalArgumentException("Expected traces of the same length");
+		}
 		
 		// calc means and squared means
-		double sum1 = 0, sum2 = 0, sumsq1 = 0, sumsq2 = 0;
+		double mean1 = 0, mean2 = 0, sumsq1 = 0, sumsq2 = 0;
 		for (Double d : trace1) {
-			sum1 += d;
+			mean1 += d;
 			sumsq1 += d * d;
 		}
+		mean1 /= sampleCount;
 		for (Double d : trace2) {
-			sum2 += d;
+			mean2 += d;
 			sumsq2 += d * d;
 		}
-		
-		// sum to get totals
-		double totalMean = (sum1 + sum2);
-		double totalSq = (sumsq1 + sumsq2);
-		
-		
-		// calculate variances for all (including total counts)
-		double var1 = sumsq1 - sum1 * sum1;
-		double var2 = sumsq2 - sum2 * sum2;
+		mean2 /= sampleCount;
+
+		// calculate variances for both chains
+		double var1 = (sumsq1 - mean1 * mean1 * sampleCount)/(sampleCount - 1);
+		double var2 = (sumsq2 - mean2 * mean2 * sampleCount)/(sampleCount - 1);
 		
 		// average variance for this item
-		double fW = ((var1 + var2) / 2) / (trace1.length - 1);
+		double fW = (var1 + var2) / 2;
 
-		// variance for joint
-		double fB = (totalSq - totalMean * totalMean) / (2 * trace1.length - 1);
+		// sum to get totals
+		double totalMean = (mean1 + mean2) / 2;
+		double totalSq = mean1*mean1 + mean2*mean2;
 		
-		double R = fB/fW;
+		// variance for joint
+		double fB = (totalSq - totalMean * totalMean * 2);
+		
+		
+		double varR = ((sampleCount - 1.0)/sampleCount) + (fB/fW)*(1.0/sampleCount);
+		double R = Math.sqrt(varR);
 		return R;
 	}
 
+	/** Split-R, following 
+	 * Gelman, A., Carlin, J.B., Stern, H.S., Dunson, D.B., Vehtari, A. and Rubin, D.B.. 
+	 * Bayesian data analysis. CRC press. 2013.
+	 */
+	private double calcSplitGRStat(Double[] trace1, Double[] trace2) {
+		if (trace2.length != trace1.length) {
+			throw new IllegalArgumentException("Expected traces of the same length");
+		}
+		int sampleCount = trace1.length/2;
+		int sampleCountb = trace1.length - sampleCount;
+		
+		// calc means and squared means
+		double mean1a = 0, mean2a = 0, sumsq1a = 0, sumsq2a = 0;
+		double mean1b = 0, mean2b = 0, sumsq1b = 0, sumsq2b = 0;
+		for (int i = 0; i < sampleCount; i++) {
+			final double d = trace1[i];
+			mean1a += d;
+			sumsq1a += d * d;
+			final double d2 = trace2[i];
+			mean2a += d2;
+			sumsq2a += d2 * d2;
+		}
+		mean1a /= sampleCount;
+		mean2a /= sampleCount;
+		for (int i = sampleCount; i < trace1.length; i++) {
+			final double d = trace1[i];
+			mean1b += d;
+			sumsq1b += d * d;
+			final double d2 = trace2[i];
+			mean2b += d2;
+			sumsq2b += d2 * d2;
+		}
+		mean1b /= sampleCountb;
+		mean2b /= sampleCountb;
+		
+
+		// calculate variances for both chains
+		double var1a = (sumsq1a - mean1a * mean1a * sampleCount)/(sampleCount - 1);
+		double var2a = (sumsq2a - mean2a * mean2a * sampleCount)/(sampleCount - 1);
+		double var1b = (sumsq1b - mean1b * mean1b * sampleCountb)/(sampleCountb - 1);
+		double var2b = (sumsq2b - mean2b * mean2b * sampleCountb)/(sampleCountb - 1);
+		
+		// average variance for this item
+		double fW = (var1a + var2a + var1b + var2b) / 4;
+
+		// sum to get totals
+		double totalMean = (mean1a + mean2a + mean1b + mean2b) / 4;
+		double totalSq = mean1a*mean1a + mean2a*mean2a + mean1b*mean1b + mean2b*mean2b;
+		
+		// variance for joint
+		double fB = (totalSq - totalMean * totalMean * 4)/3.0;
+		
+		
+		double varR = ((sampleCount - 1.0)/sampleCount) + (fB/fW)*(1.0/sampleCount);
+		double R = Math.sqrt(varR);
+		return R;
+	}
+	
 	private String getFilename(String fileName, int cycle) {
 		if (fileName != null && autoConverge) {
 			if (fileName.indexOf(File.pathSeparator) > 0) {
