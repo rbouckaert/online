@@ -52,17 +52,16 @@ public class TraceExpander extends BaseStateExpander {
 	 *   often used to declare convergence."
 	 *   But even 1.1 is often too low (https://arxiv.org/pdf/1812.09384.pdf) and 1.01 makes more sense. 
 	 */
-    final public Input<Double> maxRInput = new Input<>("maxR", "maximum acceptable value of Gelman Rubin statistic."
-			+ "The chain keeps afterburning (with chainLength steps) till all items in trace log converge. "
-			+ "Set to less than 1 to stop after first cycle.", 1.01);
+    final public Input<Double> thresholdInput = new Input<>("threshold", "threshold appropriate for convergence criterion, "
+    		+ "e.g. maximum acceptable value of Gelman Rubin statistic, or minimum p-value for KS test. "
+			+ "Set 'criterion' to 'none' to stop after first cycle.", 1.01);
+    
 	final public Input<String> tempDirInput = new Input<>("tempDir","directory where temporary files are written."
 			+ "(Ignored if maxRInput < 1).", "/tmp/");
-	
-    final public Input<ConvergenceCriterion> criterionInput = new Input<>("criterion", "Criterion for testig convergence:"
-    		+ "GR for Gelman-Rubin statistic, "
-    		+ "SplitR for use split-R estimate of Gelman-Rubin statistic, "
-    		+ "KS for Kolmogorov Smirnov test at p=5% "
-    		+ "(Ignored if maxRInput < 1).", ConvergenceCriterion.SplitR, ConvergenceCriterion.values());
+    final public Input<ConvergenceCriterion> criterionInput = new Input<>("criterion",
+			"If not set to 'none', the chain keeps afterburning (with chainLength steps) till all items in trace log converge. " +
+    		DistributionComparator.convergenceCriterionDescription, 
+    		ConvergenceCriterion.KDE, ConvergenceCriterion.values());
     
     
     private int nrOfThreads;
@@ -129,22 +128,27 @@ public class TraceExpander extends BaseStateExpander {
 			return false;
 		}
 		
-		double maxStat = Double.MIN_VALUE;
+		double maxStat = Double.MIN_VALUE, minStat = Double.MAX_VALUE;
 		DistributionComparator comparator = new DistributionComparator();
 		for (Logger logger : loggers) {
 			if (!logger.isLoggingToStdout() && logger.mode == Logger.LOGMODE.compound) {
 				String fileName1 = getFilename(logger.fileNameInput.get(), cycle-1);
 				String fileName2 = getFilename(logger.fileNameInput.get(), cycle-2);
 				maxStat = Math.max(maxStat, comparator.calcStats(fileName1, fileName2, criterion));
+				minStat = Math.min(minStat, comparator.calcStats(fileName1, fileName2, criterion));
 			}
  		}
 		
 		switch (criterion) {
+			case none:
+				return true;
 			case GR:
 			case SplitR:
-				return maxStat < maxRInput.get();
 			case KS:
-				return maxStat < 0.05;
+			case mean:
+				return maxStat < thresholdInput.get();
+			case KDE:
+				return minStat > thresholdInput.get();
 		}
 		return true;
 	}
@@ -202,7 +206,7 @@ public class TraceExpander extends BaseStateExpander {
 			Randomizer.setSeed(seedInput.get());
 		}
 		
-		autoConverge = maxRInput.get() > 1.0;
+		autoConverge = !criterionInput.get().equals(ConvergenceCriterion.none);
 	}
 
 	private boolean importModels() throws IOException, SAXException, ParserConfigurationException, XMLParserException {

@@ -14,16 +14,19 @@ import beast.util.LogAnalyser;
 @Description("Various ways to compare two distributions")
 public class DistributionComparator extends Runnable {
 
-	public enum ConvergenceCriterion {GR, SplitR, KS, mean, KDE}
-	final public Input<LogFile> trace1Input = new Input<>("trace1", "first trace file to compare", Validate.REQUIRED);
-	final public Input<LogFile> trace2Input = new Input<>("trace2", "second trace file to compare", Validate.REQUIRED);
-	final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of trace logs to used as burn-in (and will be ignored)", 10);
-    final public Input<ConvergenceCriterion> criterionInput = new Input<>("criterion", "Criterion for testig convergence:"
+	
+	public enum ConvergenceCriterion {GR, SplitR, KS, mean, KDE, none}
+	final public static String convergenceCriterionDescription = "Criterion for testig convergence:"
+			+ "none for always accepting equality, "
     		+ "GR for Gelman-Rubin statistic, "
     		+ "SplitR for use split-R estimate of Gelman-Rubin statistic, "
     		+ "KS for Kolmogorov Smirnov test at p=5% "
     		+ "KDE for kernel density estimate "
-    		+ "mean for checking difference of means with stdev=(2*error1+2*error2) ", ConvergenceCriterion.SplitR, ConvergenceCriterion.values());
+    		+ "mean for checking difference of means with stdev=(2*error1+2*error2) ";
+	final public Input<LogFile> trace1Input = new Input<>("trace1", "first trace file to compare", Validate.REQUIRED);
+	final public Input<LogFile> trace2Input = new Input<>("trace2", "second trace file to compare", Validate.REQUIRED);
+	final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of trace logs to used as burn-in (and will be ignored)", 10);
+    final public Input<ConvergenceCriterion> criterionInput = new Input<>("criterion", convergenceCriterionDescription, ConvergenceCriterion.SplitR, ConvergenceCriterion.values());
 
 	
     private boolean verbose = false;
@@ -61,6 +64,7 @@ public class DistributionComparator extends Runnable {
 		}
 		
 		double maxStat = Double.MIN_VALUE;
+		double minStat = Double.MAX_VALUE;
 		for (int i = 0; i < log1.getLabels().size(); i++) {
 			double stat = maxStat;
 			switch (criterion) {
@@ -80,15 +84,22 @@ public class DistributionComparator extends Runnable {
 			case KDE:
 				stat = calsKDEStat(trace1[i+1], trace2[i+1]);
 				break;
+			default:
 			}
 			maxStat = Math.max(maxStat, stat);
+			minStat = Math.min(minStat, stat);
 			if (verbose) {
 				String label = log1.getLabels().get(i);
 				Log.info(label + (label.length() < space.length() ? space.substring(label.length()) : " ") + " " + stat);
 				
 			}
 		}
-		return maxStat;
+		switch (criterion) {
+			case KS:
+				return minStat;
+			default:
+				return maxStat;
+		}
 	}
 
 	final static private int RANGE = 100;
