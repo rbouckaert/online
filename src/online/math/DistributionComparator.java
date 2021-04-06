@@ -1,6 +1,8 @@
 package online.math;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import beast.app.util.Application;
 import beast.app.util.LogFile;
@@ -23,8 +25,7 @@ public class DistributionComparator extends Runnable {
     		+ "KS for Kolmogorov Smirnov test at p=5% "
     		+ "KDE for kernel density estimate "
     		+ "mean for checking difference of means with stdev=(2*error1+2*error2) ";
-	final public Input<LogFile> trace1Input = new Input<>("trace1", "first trace file to compare", Validate.REQUIRED);
-	final public Input<LogFile> trace2Input = new Input<>("trace2", "second trace file to compare", Validate.REQUIRED);
+	final public Input<List<LogFile>> traceInput = new Input<>("log", "two or more trace files to compare", new ArrayList<>());
 	final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of trace logs to used as burn-in (and will be ignored)", 10);
     final public Input<ConvergenceCriterion> criterionInput = new Input<>("criterion", convergenceCriterionDescription, ConvergenceCriterion.SplitR, ConvergenceCriterion.values());
 
@@ -36,15 +37,26 @@ public class DistributionComparator extends Runnable {
 	public void initAndValidate() {
 	}
 
+	public void setVerbose(boolean verbose) {
+		this.verbose = verbose;
+	}
+	
 	@Override
 	public void run() throws Exception {
 		verbose = true;
 		int burnInPercentage = burnInPercentageInput.get();
-		LogAnalyser trace1 = new LogAnalyser(trace1Input.get().getAbsolutePath(), burnInPercentage, true, false);
-		LogAnalyser trace2 = new LogAnalyser(trace2Input.get().getAbsolutePath(), burnInPercentage, true, false);
+		List<LogFile> traceFiles = traceInput.get();
+		LogAnalyser [] trace = new LogAnalyser[traceFiles.size()];
+		for (int i = 0; i < trace.length; i++) {
+			trace[i] = new LogAnalyser(traceFiles.get(i).getAbsolutePath(), burnInPercentage, true, false);
+		}
+		
 		ConvergenceCriterion criterion = criterionInput.get();
 		
-		calcStats(trace1, trace2, criterion);
+		for (int i = 0; i < trace.length - 1; i++) {
+			Log.info(traceFiles.get(i).getName() + "--" + traceFiles.get(i+1).getName());
+			calcStats(trace[i], trace[i+1], criterion);
+		}
 	}
 	
 

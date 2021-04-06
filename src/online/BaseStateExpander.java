@@ -102,7 +102,7 @@ public class BaseStateExpander extends beast.core.Runnable {
 			positionAdditions(model2, taxon);
 		}
 		
-		afterBurner(model2, additions);
+		afterBurner(model2, additions, proportionPartitionedInput.get());
 		
 		Log.debug(model2.tree.getRoot().toNewick());
 
@@ -310,14 +310,14 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	 * @throws XMLParserException **/
 	
 	MCMC mcmc = null;
-	protected void afterBurner(Model model, List<String> additions) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
+	protected void afterBurner(Model model, List<String> additions, double proportionPartitioned) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		
 		if (mcmc == null) {
 			mcmc = newMCMC(model, additions);
 		}
 		
 		((PartitionMCMC)mcmc).initState(model.state.toXML(0));
-		((PartitionMCMC)mcmc).setProportion(proportionPartitionedInput.get());
+		((PartitionMCMC)mcmc).setProportion(proportionPartitioned);
 		
 		mcmc.run();
 		

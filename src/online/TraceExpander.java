@@ -7,6 +7,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -71,7 +72,7 @@ public class TraceExpander extends BaseStateExpander {
 	private Model model2;
 	private long sampleNr;
 	private BufferedReader fin;
-	private String multiStateFile;
+	private String multiStateInputFile;
 	private PrintStream multiStateOut;
 	private boolean autoConverge;
 	private ConvergenceCriterion criterion;
@@ -90,27 +91,43 @@ public class TraceExpander extends BaseStateExpander {
 		
 		
 		int cycle = 0;
+		boolean isResuming = importModels();
+		int n = getStateCount();
+		int burnIn = skipBurnin(isResuming, n);
+		
+		initLoggers(cycle);
+		
+		sampleNr = 0;
+		if (nrOfThreads == 1) {
+			processUnThreaded(n - burnIn, false);
+		} else {
+			// split work over k threads, with work for (n - burnIn)/k states each
+			processThreaded(n - burnIn, false);
+		}
+		
+		String xml2Path = xml2Input.get().getAbsolutePath();
+		close(cycle, xml2Path);
+		
+		
 		do {
-			boolean isResuming = importModels();
-	
-			int n = getStateCount();
-			int burnIn = skipBurnin(isResuming, n);
-			
+			// prep for next cycle
+			cycle++;
+			isResuming = true;
+			multiStateOut = new PrintStream(xml2Path + ".state.multi.tmp");
+			multiStateInputFile = xml2Path + ".state.multi";
+	        fin = new BufferedReader(new FileReader(multiStateInputFile));
+
 			initLoggers(cycle);
 			
 			sampleNr = 0;
 			if (nrOfThreads == 1) {
-				processUnThreaded(n - burnIn);
+				processUnThreaded(n - burnIn, true);
 			} else {
 				// split work over k threads, with work for (n - burnIn)/k states each
-				processThreaded(n - burnIn);
+				processThreaded(n - burnIn, true);
 			}
 			
-			close(isResuming, cycle);
-			
-			// prep for next cycle
-			cycle++;
-			xml2Input.setValue(null, this);
+			close(cycle, xml2Path);
 		} while (!converged(cycle));
 		
 		Long end = System.currentTimeMillis();
@@ -123,19 +140,21 @@ public class TraceExpander extends BaseStateExpander {
 		if (!autoConverge) {
 			return true;
 		}
-		if (cycle == 1) {
+		if (cycle == 0) {
 			// need at least two log files
 			return false;
 		}
 		
 		double maxStat = Double.MIN_VALUE, minStat = Double.MAX_VALUE;
 		DistributionComparator comparator = new DistributionComparator();
+		comparator.setVerbose(true);
 		for (Logger logger : loggers) {
 			if (!logger.isLoggingToStdout() && logger.mode == Logger.LOGMODE.compound) {
-				String fileName1 = getFilename(logger.fileNameInput.get(), cycle-1);
-				String fileName2 = getFilename(logger.fileNameInput.get(), cycle-2);
-				maxStat = Math.max(maxStat, comparator.calcStats(fileName1, fileName2, criterion));
-				minStat = Math.min(minStat, comparator.calcStats(fileName1, fileName2, criterion));
+				String fileName1 = getFilename(logger.fileNameInput.get(), cycle);
+				String fileName2 = getFilename(logger.fileNameInput.get(), cycle-1);
+				double stat = comparator.calcStats(fileName1, fileName2, criterion);
+				maxStat = Math.max(maxStat, stat);
+				minStat = Math.min(minStat, stat);
 			}
  		}
 		
@@ -144,10 +163,10 @@ public class TraceExpander extends BaseStateExpander {
 				return true;
 			case GR:
 			case SplitR:
-			case KS:
+			case KDE:
 			case mean:
 				return maxStat < thresholdInput.get();
-			case KDE:
+			case KS:
 				return minStat > thresholdInput.get();
 		}
 		return true;
@@ -156,13 +175,13 @@ public class TraceExpander extends BaseStateExpander {
 	
 	private String getFilename(String fileName, int cycle) {
 		if (fileName != null && autoConverge) {
-			if (fileName.indexOf(File.pathSeparator) > 0) {
-				fileName = fileName.substring(fileName.lastIndexOf(File.pathSeparator) + 1);
+			if (fileName.lastIndexOf(File.separator) > 0) {
+				fileName = fileName.substring(fileName.lastIndexOf(File.separator) + 1);
 				if (fileName.startsWith("cycle") && fileName.indexOf("_") > 0) {
 					fileName = fileName.substring(fileName.indexOf("_") + 1);
 				}
-				fileName = tempDirInput.get() + File.pathSeparator + "cycle" + cycle + "_" + fileName;
 			}
+			fileName = tempDirInput.get() + File.separator + "cycle" + cycle + "_" + fileName;
 		}
 		return fileName;
 	}
@@ -210,48 +229,45 @@ public class TraceExpander extends BaseStateExpander {
 	}
 
 	private boolean importModels() throws IOException, SAXException, ParserConfigurationException, XMLParserException {
-		multiStateFile = multiStateFileInput.get().getPath();
-		if (multiStateFile == null || multiStateFile.equals("[[none]]")) {
-			multiStateFile = xml1Input.get().getPath() + ".state.multi"; 
+		multiStateInputFile = multiStateFileInput.get().getPath();
+		if (multiStateInputFile == null || multiStateInputFile.equals("[[none]]")) {
+			multiStateInputFile = xml1Input.get().getPath() + ".state.multi"; 
 		}
-		if (!new File(multiStateFile).exists()) {
-			throw new IllegalArgumentException("Could not find state file " + multiStateFile);
+		if (!new File(multiStateInputFile).exists()) {
+			throw new IllegalArgumentException("Could not find state file " + multiStateInputFile);
 		}
 		// import models
 		boolean isResuming = false;
 		if (xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]")) {
 			// if not specified, assume we are resuming
 			model2 = getModelFromFile(xml1Input.get());
-			multiStateOut = new PrintStream(xml1Input.get().getAbsolutePath() + ".state.multi.tmp");
 			isResuming = true;
 		} else {
 			model2 = getModelFromFile(xml2Input.get());
-			multiStateOut = new PrintStream(xml2Input.get().getAbsolutePath() + ".state.multi");
 		}
+		multiStateOut = new PrintStream(xml2Input.get().getAbsolutePath() + ".state.multi.tmp");
 		return isResuming;
 	}
 
-	private void close(boolean isResuming, int cycle) throws IOException {
+	private void close(int cycle, String xml2Path) throws IOException {
 		fin.close();
 
 		for (Logger logger : loggers) {
 			logger.close();
 		}
+					
+		Files.move(
+				new File(xml2Path + ".state.multi.tmp").toPath(), 
+				new File(xml2Path + ".state.multi").toPath(),
+				java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 		
-		if (isResuming) {
-			Files.move(
-					new File(xml1Input.get().getAbsolutePath() + ".state.multi.tmp").toPath(), 
-					new File(xml1Input.get().getAbsolutePath() + ".state.multi").toPath(),
-					java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-		}
-		
-		if (autoConverge) {
+		if (autoConverge && cycle > 0) {
 			for (Logger logger : loggers) {
 				if (!logger.isLoggingToStdout()) {
 					String from1 = getFilename(logger.fileNameInput.get(), cycle-1);
 					String from2 = getFilename(logger.fileNameInput.get(), cycle);
 					String to = logger.fileNameInput.get();
-					to = to.substring(to.lastIndexOf(File.pathSeparator) + 1);
+					to = to.substring(to.lastIndexOf(File.separator) + 1);
 					if (to.startsWith("cycle") && to.indexOf("_") > 0) {
 						to = to.substring(to.indexOf("_") + 1);
 					}
@@ -266,7 +282,7 @@ public class TraceExpander extends BaseStateExpander {
 
 	// skip burn-in states
     private int skipBurnin(boolean isResuming, int n) throws IOException {
-        fin = new BufferedReader(new FileReader(multiStateFile));
+        fin = new BufferedReader(new FileReader(multiStateInputFile));
 		int burnIn = isResuming ? 0 : burnInPercentageInput.get() * n / 100;
 		if (burnIn > 0) {
 			Log.info("Skipping " + burnIn + " states as burn-in");
@@ -281,10 +297,12 @@ public class TraceExpander extends BaseStateExpander {
 	class CoreRunnable implements Runnable {
     	int from; 
     	int to;
+    	boolean afterBurnOnly;
 
-        CoreRunnable(int from, int to) {
+        CoreRunnable(int from, int to, boolean afterBurnOnly) {
     		this.from = from;
     		this.to = to;
+    		this.afterBurnOnly = afterBurnOnly;
         }
 
         @Override
@@ -310,8 +328,13 @@ public class TraceExpander extends BaseStateExpander {
 
             	for (int i = from; i < to; i++) {
         			String xml = nextState();
-        			model1.state.fromXML(xml);
-        			expander.updateState(model1, model2);
+        			if (!afterBurnOnly) {
+        				model1.state.fromXML(xml);
+        				expander.updateState(model1, model2);
+        			} else {
+        				model2.state.fromXML(xml);
+        				expander.afterBurner(model2, new ArrayList<>(), 0.0);
+        			}
         			logState(model2.state);
             	}
             } catch (Exception e) {
@@ -323,14 +346,14 @@ public class TraceExpander extends BaseStateExpander {
         }
     } // CoreRunnable
     
-	private void processThreaded(int n)  throws IOException, InterruptedException {
+	private void processThreaded(int n, boolean afterBurnOnly)  throws IOException, InterruptedException {
         countDown = new CountDownLatch(nrOfThreads);
         // kick off the threads
         int from = 0;
         int delta = Math.max(1, n / nrOfThreads); 
         int to = delta;
         for (int i = 0; i < nrOfThreads; i++) {
-            CoreRunnable coreRunnable = new CoreRunnable(from, to);
+            CoreRunnable coreRunnable = new CoreRunnable(from, to, afterBurnOnly);
             exec.execute(coreRunnable);
             from = to;
             to += delta;
@@ -341,7 +364,7 @@ public class TraceExpander extends BaseStateExpander {
         countDown.await();
 	}
 
-	private void processUnThreaded(int n)  throws IOException, SAXException, ParserConfigurationException, XMLParserException {
+	private void processUnThreaded(int n, boolean afterBurnOnly)  throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		Model model1 = getModelFromFile(xml1Input.get());
 		
 		String stateFile = stateFileInput.get().getPath();
@@ -359,8 +382,14 @@ public class TraceExpander extends BaseStateExpander {
         for (int i = 0; i < n; i++) {
 			// get state from file
 			String xml = nextState();
-			model1.state.fromXML(xml);
-			updateState(model1, model2);
+			
+			if (!afterBurnOnly) {
+				model1.state.fromXML(xml);
+				updateState(model1, model2);
+			} else {
+				model2.state.fromXML(xml);
+				afterBurner(model2, new ArrayList<>(), 0);
+			}
 
 //			Distribution p = model2.mcmc.posteriorInput.get();
 //			double logP2 = model2.state.robustlyCalcPosterior(p);
@@ -385,7 +414,7 @@ public class TraceExpander extends BaseStateExpander {
 
 	/** counts number of states in state file **/
 	private int getStateCount() throws IOException {
-        BufferedReader fin = new BufferedReader(new FileReader(multiStateFile));
+        BufferedReader fin = new BufferedReader(new FileReader(multiStateInputFile));
         String str = null;
         int n = 0;
         while (fin.ready()) {
@@ -425,6 +454,8 @@ public class TraceExpander extends BaseStateExpander {
 			multiStateOut.println(other.toXML(sampleNr));
 		}
 		sampleNr++;
+		
+		// print progress bar:
 		if (sampleNr % 10 == 0) {
 			if (sampleNr % 50 == 0) {
 				System.err.print("|");
