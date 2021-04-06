@@ -17,6 +17,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import org.xml.sax.SAXException;
 
 import beast.app.util.XMLFile;
+import beast.core.BEASTInterface;
 import beast.core.Description;
 import beast.core.Distribution;
 import beast.core.Input;
@@ -27,9 +28,12 @@ import beast.core.OperatorSchedule;
 import beast.core.Runnable;
 import beast.core.State;
 import beast.core.StateNode;
+import beast.core.parameter.BooleanParameter;
 import beast.core.parameter.IntegerParameter;
 import beast.core.parameter.Parameter;
+import beast.core.parameter.RealParameter;
 import beast.core.util.Log;
+import beast.evolution.branchratemodel.BranchRateModel;
 import beast.evolution.tree.Node;
 import beast.evolution.tree.TraitSet;
 import beast.evolution.tree.Tree;
@@ -38,12 +42,14 @@ import beast.util.XMLParserException;
 import beast.util.XMLProducer;
 import online.operators.AfterburnOperatorSchedule;
 import online.operators.ExchangeOnPartition;
+import online.operators.RandomWalkOnParition;
+import online.operators.RateScaleOnPartition;
 import online.operators.TreePartition;
 import online.operators.UniformOnPartition;
 
-//TODO: take rates in account in estimated parameters
+// take rates in account in estimated parameters
 //TODO: take group sizes in account in estimated parameters
-//TODO: figure out a way to automatically determine chain length, perhaps based on the Gelman Rubin statistic
+// automatically determines chain length, perhaps based on Gelman Rubin or other statistic
 
 @Description("Base class for create a new state extending an input state with different set of taxa")
 public class BaseStateExpander extends beast.core.Runnable {
@@ -92,7 +98,7 @@ public class BaseStateExpander extends beast.core.Runnable {
 		
 		// position additional taxa at locations with high support
 		for (String taxon : additions) {
-			addTaxon(model2, taxon, leafNodeCount);
+			addTaxon(model1, model2, taxon, leafNodeCount);
 			positionAdditions(model2, taxon);
 		}
 		
@@ -124,7 +130,7 @@ public class BaseStateExpander extends beast.core.Runnable {
         root.setParent(null);
     }
 
-	protected void addTaxon(Model model2, String taxon, int leafNodeCount) {
+	protected void addTaxon(Model model1, Model model2, String taxon, int leafNodeCount) {
 		Tree tree2 = model2.tree;
 
 
@@ -149,10 +155,59 @@ public class BaseStateExpander extends beast.core.Runnable {
 		newRoot.setHeight(model2.tree.getRoot().getHeight() * (model2.tree.getNodeCount()+1.0)/model2.tree.getNodeCount());
 		setRoot(model2.tree, newRoot);
 
-		renumberInternal(tree2.getRoot(), tree2.getNodesAsArray(), map, new int[]{leafNodeCount});
-		// tree2.initAndValidate();
+		for (int i = 0; i < model1.parameters.size(); i++) {
+			((StateNode)model1.parameters.get(i)).assignFrom((StateNode)model2.parameters.get(i));
+		}
+		
+		// renumber nodes and update clock model parameters
+		renumberInternal(tree2.getRoot(), tree2.getNodesAsArray(), map, new int[]{leafNodeCount}, model1.parameters, model2.parameters);
+		
+		// set meta data for child and newRoot
+		setupMetaData(child.getNr(), model2.parameters);
+		setupMetaData(newRoot.getNr(), model2.parameters);
+		setupMetaData(newRoot.getLeft().getNr(), model2.parameters);
+		setupMetaData(newRoot.getRight().getNr(), model2.parameters);
+
 	} // initialiseTree
 
+	private void setupMetaData(int i, List<Parameter<?>> metaData) {
+		for (int k = 0; k < metaData.size(); k++) {
+			Parameter<?> p = metaData.get(k);
+			if (i < p.getDimension()) {
+				if (p instanceof RealParameter) {
+					// TODO: robustify this 
+					((RealParameter) p).setValue(i, 1.0);
+				} else if (p instanceof BooleanParameter) {
+					// TODO: robustify this?
+					((BooleanParameter) p).setValue(i, false);
+				} else {
+					// TODO: robustify this? 
+					IntegerParameter ip = (IntegerParameter) p;
+					ip.setValue(i, (ip.getUpper() - ip.getLower())/2);
+				}
+			}
+		}
+	}
+	
+	private void updateMetaData(int i, int j, List<Parameter<?>> originalMetaData, List<Parameter<?>> metaData) {
+		if (i != j) {
+			for (int k = 0; k < metaData.size(); k++) {
+				Parameter<?> p = metaData.get(k);
+				if (i < p.getDimension()) {
+					Parameter<?> p0 = originalMetaData.get(k);
+					if (p instanceof RealParameter) {
+						((RealParameter) p).setValue(j, (Double)(p0.getValue(i)));
+					} else if (p instanceof BooleanParameter) {
+						((BooleanParameter) p).setValue(i, (Boolean)(p0.getValue(i)));
+					} else {
+						((IntegerParameter) p).setValue(j, (Integer)(p0.getValue(i)));
+					}
+				}
+			}
+		}		
+	}
+	
+	
 	/** changes root of tree in such a way that the original root
 	 * node remains root node, swapping nodes if required
 	 */
@@ -197,22 +252,32 @@ public class BaseStateExpander extends beast.core.Runnable {
 		oldRoot.setHeight(tmp);
 	}
 
-	protected int renumberInternal(Node node, Node [] nodes, Map<String, Integer> map, int[] nr) {
+	protected int renumberInternal(Node node, Node [] nodes, Map<String, Integer> map, int[] nr,
+			List<Parameter<?>> originalMetaData, List<Parameter<?>> metaData) {
 		for (Node child : node.getChildren()) {
-			renumberInternal(child, nodes, map, nr);
+			renumberInternal(child, nodes, map, nr, originalMetaData, metaData);
 		}
 		if (!node.isLeaf()) {
+			int i = node.getNr();
+			int j = nr[0];
+			updateMetaData(i, j, originalMetaData, metaData);
+			
+			// update node number
 			node.setNr(nr[0]);
-			nr[0]++;
+			nr[0]++;			
 		} else { // node is leaf
-			if (node.getNr() != map.get(node.getID())) {
-				Log.debug(node.getID() + " " + node.getNr()+" => " + map.get(node.getID()));
+			int i = node.getNr();
+			if (i != map.get(node.getID())) {
+				Log.debug(node.getID() + " " + i +" => " + map.get(node.getID()));
 				node.setNr(map.get(node.getID()));
+				int j = map.get(node.getID());
+				updateMetaData(i, j, originalMetaData, metaData);
 			}
 		}
 		nodes[node.getNr()] = node;
 		return nr[0];
 	}
+
 
 	protected void positionAdditions(Model model2, String taxon) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		// adding a single taxon
@@ -302,8 +367,22 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 			op2.setID("UniformOnPartition");
 			operators.add(op1);
 			operators.add(op2);
-
-			// TODO: add RateScale operator if required
+			
+			// add RateScale or RandomWalk operator if required for clock parameters
+			for (Parameter<?> p : model.parameters) {
+				if (isClockModelParameter(p))
+					if (p instanceof RealParameter) {
+						// for parameters representing rate per branch
+						RateScaleOnPartition op3 = new RateScaleOnPartition(partition, (RealParameter) p, 1.0);
+						op3.setID("RateScaleOnPartition");
+						operators.add(op3);
+					} else {
+						// for parameters representing category (relaxed clock) or indicator (random clock) per branch
+						RandomWalkOnParition op3 = new RandomWalkOnParition(partition, (IntegerParameter) p, 1.0);
+						op3.setID("RandomWalkOnParition");
+						operators.add(op3);
+					}
+				}
 		} else {
 			// set proportion partitioned operators to zero
 			proportionPartitionedInput.setValue(0.0, this);
@@ -344,6 +423,15 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		return mcmc;
 	}
 
+	private boolean isClockModelParameter(Parameter<?> p) {
+		for (BEASTInterface o : ((BEASTInterface)p).getOutputs()) {
+			if (o instanceof BranchRateModel) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
 	protected TreePartition determinePartition(Model model, List<String> additions) {
 		Set<Integer> values = new HashSet<>();
 		for (String taxonName : additions) {
@@ -542,6 +630,18 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 					} else {
 						model1.parameters.add((Parameter<?>)sn1);
 						model2.parameters.add((Parameter<?>)sn2);
+						// get meta data values from tree, copied when tree1 was copied to tree2
+						Parameter<?> p1 = (Parameter<?>) sn1;
+						Parameter<?> p2 = (Parameter<?>) sn2;
+						if (p1 instanceof RealParameter) {
+							for (int j = 0; j < p1.getDimension(); j++) {
+								((RealParameter)p2).setValue((Double)p1.getValue(j));
+							}
+						} else {
+							for (int j = 0; j < p1.getDimension(); j++) {
+								((IntegerParameter)p2).setValue((Integer)p1.getValue(j));
+							}
+						}
 					}
 				} else {
 					sn2.assignFrom(sn1);
@@ -569,6 +669,16 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 				}
 			}
 		}
+		for (StateNode sn : model.state.stateNodeInput.get()) {
+			if (sn instanceof Parameter && ((Parameter)sn).getDimension() > model.tree.getLeafNodeCount() && isClockModelParameter((Parameter)sn)) {
+				Node [] nodes = model.tree.getNodesAsArray();
+				for (int j = 0; j < ((Parameter<?>)sn).getDimension(); j++) {
+					nodes[j].setMetaData(sn.getID(), ((Parameter<?>)sn).getValue(j));
+				}				
+			}
+		}		
+
+		
 		model.mcmc = (MCMC) runnable;
 		model.posterior = (Distribution) runnable.getInputValue("distribution");
 		model.operatorSchedule = (OperatorSchedule) runnable.getInputValue("operatorschedule");
