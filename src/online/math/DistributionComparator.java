@@ -1,15 +1,19 @@
 package online.math;
 
 import java.io.IOException;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+
+import org.apache.commons.math3.stat.correlation.Covariance;
 
 import beast.app.util.Application;
 import beast.app.util.LogFile;
 import beast.core.Description;
 import beast.core.Input;
-import beast.core.Input.Validate;
 import beast.core.util.Log;
+import beast.math.util.MathUtils;
 import beast.core.Runnable;
 import beast.util.LogAnalyser;
 
@@ -17,22 +21,24 @@ import beast.util.LogAnalyser;
 public class DistributionComparator extends Runnable {
 
 	
-	public enum ConvergenceCriterion {GR, SplitR, KS, mean, KDE, none}
+	public enum ConvergenceCriterion {GR, SplitR, KS, mean, KDE, corr, none}
 	final public static String convergenceCriterionDescription = "Criterion for testig convergence:"
 			+ "none for always accepting equality, "
     		+ "GR for Gelman-Rubin statistic, "
     		+ "SplitR for use split-R estimate of Gelman-Rubin statistic, "
     		+ "KS for Kolmogorov Smirnov test at p=5% "
-    		+ "KDE for kernel density estimate "
-    		+ "mean for checking difference of means with stdev=(2*error1+2*error2) ";
+    		+ "KDE for difference in distribution by kernel density estimate "
+    		+ "mean for checking difference of means with stdev=(2*error1+2*error2) "
+    		+ "corr for correlation between pairs ";
 	final public Input<List<LogFile>> traceInput = new Input<>("log", "two or more trace files to compare", new ArrayList<>());
 	final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of trace logs to used as burn-in (and will be ignored)", 10);
     final public Input<ConvergenceCriterion> criterionInput = new Input<>("criterion", convergenceCriterionDescription, ConvergenceCriterion.SplitR, ConvergenceCriterion.values());
-
+    final public Input<Boolean> singleStatInput = new Input<>("singleStat", "consider single statistic from criterion, instead of showing all stats", true);
 	
     private boolean verbose = false;
 	final static String space = "                                                ";
-
+	private double [] stats;
+	
 	@Override
 	public void initAndValidate() {
 	}
@@ -51,14 +57,65 @@ public class DistributionComparator extends Runnable {
 			trace[i] = new LogAnalyser(traceFiles.get(i).getAbsolutePath(), burnInPercentage, true, false);
 		}
 		
-		ConvergenceCriterion criterion = criterionInput.get();
-		
-		for (int i = 0; i < trace.length - 1; i++) {
-			Log.info(traceFiles.get(i).getName() + "--" + traceFiles.get(i+1).getName());
-			calcStats(trace[i], trace[i+1], criterion);
+		if (singleStatInput.get()) {
+			ConvergenceCriterion criterion = criterionInput.get();
+			for (int i = 1; i < trace.length; i++) {
+				int j = i / 2;
+				Log.info(traceFiles.get(j).getName() + "--" + traceFiles.get(i).getName());
+				double stat = calcStats(trace[j], trace[i], criterion);
+				Log.info("Extreme: " + stat);
+			}
+			
+		} else {
+			doAllStats(trace);
 		}
+
+		
+
 	}
 	
+
+	private void doAllStats(LogAnalyser[] trace) throws IOException {
+		List<LogFile> traceFiles = traceInput.get();
+		double [][] allstats = new double[trace.length * trace[0].getLabels().size()][ConvergenceCriterion.values().length];
+		double [][] extremes = new double[trace.length][ConvergenceCriterion.values().length];
+		stats = new double[trace[0].getLabels().size()];
+		verbose = false;
+		int r = 0;
+		for (ConvergenceCriterion c : ConvergenceCriterion.values()) {
+			for (int i = 1; i < trace.length; i++) {
+				int j = i / 2;
+
+				double stat = calcStats(trace[j], trace[i], c);
+				extremes[i-1][r] = stat;
+				for (int k = 0; k < stats.length; k++) {
+					allstats[(i-1) * stats.length + k][r] = stats[k];
+				}
+			}
+			r++;
+		}
+
+		Log.info(space + " " + Arrays.toString(ConvergenceCriterion.values()));
+		DecimalFormat formatter = new DecimalFormat("#.####");
+		for (int i = 1; i < trace.length; i++) {
+			int j = i / 2;
+			Log.info(traceFiles.get(j).getName() + "--" + traceFiles.get(i).getName());
+			for (int k = 0; k < stats.length; k++) {
+				String label = trace[0].getLabels().get(k);
+				Log.info.print(label + (label.length() < space.length() ? space.substring(label.length()) : " ") + " ");
+				for (r = 0; r < allstats[0].length; r++) {
+					Log.info.print(formatter.format(allstats[(i-1) * stats.length + k][r]) + "\t");
+				}
+				Log.info.println();
+			}
+			Log.info.print("Total:" + space.substring(5));
+			for (r = 0; r < allstats[0].length; r++) {
+				Log.info.print(formatter.format(extremes[i-1][r]) + "\t");
+			}
+			Log.info.println();
+		}
+		
+	}
 
 	public double calcStats(String fileName1, String fileName2, ConvergenceCriterion criterion) throws IOException {
 		LogAnalyser trace1 = new LogAnalyser(fileName1, 0, true, false);
@@ -70,7 +127,7 @@ public class DistributionComparator extends Runnable {
 		Double [][] trace1 = log1.getTraces();
 		Double [][] trace2 = log2.getTraces();
 
-		if (criterion == ConvergenceCriterion.mean) {
+		if (criterion == ConvergenceCriterion.mean || criterion == ConvergenceCriterion.corr) {
 			log1.calcStats();
 			log2.calcStats();
 		}
@@ -94,9 +151,16 @@ public class DistributionComparator extends Runnable {
 						log1.getStdError(i+1), log2.getStdError(i+1));
 				break;
 			case KDE:
-				stat = calsKDEStat(trace1[i+1], trace2[i+1]);
+				stat = calcKDEStat(trace1[i+1], trace2[i+1]);
+				break;
+			case corr:
+				stat = calcCorrelation(trace1[i+1],  log1.getStdDev(i+1), 
+						trace2[i+1], log2.getStdDev(i+1));
 				break;
 			default:
+			}
+			if (stats != null) {
+				stats[i] = stat;
 			}
 			maxStat = Math.max(maxStat, stat);
 			minStat = Math.min(minStat, stat);
@@ -114,8 +178,22 @@ public class DistributionComparator extends Runnable {
 		}
 	}
 
+	private double calcCorrelation(Double[] trace1, double stdev1, Double[] trace2, double stdev2) {
+		if (stdev1 <= 0 || stdev2 <= 0) {
+			return 0;
+		}
+		
+		double [] x0 = toDouble(trace1);
+		double [] y0 = toDouble(trace2);
+
+		Covariance covar = new Covariance();		
+		double covariance = covar.covariance(x0, y0);
+		double correlation = covariance / (stdev1 * stdev2 );
+		return correlation;
+	}
+
 	final static private int RANGE = 100;
-	private double calsKDEStat(Double[] trace1, Double[] trace2) {
+	private double calcKDEStat(Double[] trace1, Double[] trace2) {
 		int n = trace1.length + trace2.length;
 		double [] joint = new double[n];
 		for (int i = 0; i < trace1.length; i++) {

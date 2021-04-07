@@ -151,7 +151,7 @@ public class TraceExpander extends BaseStateExpander {
 		for (Logger logger : loggers) {
 			if (!logger.isLoggingToStdout() && logger.mode == Logger.LOGMODE.compound) {
 				String fileName1 = getFilename(logger.fileNameInput.get(), cycle);
-				String fileName2 = getFilename(logger.fileNameInput.get(), cycle-1);
+				String fileName2 = getFilename(logger.fileNameInput.get(), cycle/2);
 				double stat = comparator.calcStats(fileName1, fileName2, criterion);
 				maxStat = Math.max(maxStat, stat);
 				minStat = Math.min(minStat, stat);
@@ -264,7 +264,7 @@ public class TraceExpander extends BaseStateExpander {
 		if (autoConverge && cycle > 0) {
 			for (Logger logger : loggers) {
 				if (!logger.isLoggingToStdout()) {
-					String from1 = getFilename(logger.fileNameInput.get(), cycle-1);
+					String from1 = getFilename(logger.fileNameInput.get(), cycle/2);
 					String from2 = getFilename(logger.fileNameInput.get(), cycle);
 					String to = logger.fileNameInput.get();
 					to = to.substring(to.lastIndexOf(File.separator) + 1);
