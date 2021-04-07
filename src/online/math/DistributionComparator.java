@@ -94,11 +94,11 @@ public class DistributionComparator extends Runnable {
 			r++;
 		}
 
-		Log.info(space + " " + Arrays.toString(ConvergenceCriterion.values()));
 		DecimalFormat formatter = new DecimalFormat("#.####");
 		for (int i = 1; i < trace.length; i++) {
 			int j = i / 2;
 			Log.info(traceFiles.get(j).getName() + "--" + traceFiles.get(i).getName());
+			Log.info(space + " " + Arrays.toString(ConvergenceCriterion.values()).replaceAll(", ","\t").replaceAll("[\\[\\]]",""));
 			for (int k = 0; k < stats.length; k++) {
 				String label = trace[0].getLabels().get(k);
 				Log.info.print(label + (label.length() < space.length() ? space.substring(label.length()) : " ") + " ");
@@ -134,6 +134,7 @@ public class DistributionComparator extends Runnable {
 		double maxStat = Double.MIN_VALUE;
 		double minStat = Double.MAX_VALUE;
 		for (int i = 0; i < log1.getLabels().size(); i++) {
+			String label = log1.getLabels().get(i);
 			double stat = maxStat;
 			switch (criterion) {
 			case GR:
@@ -164,7 +165,6 @@ public class DistributionComparator extends Runnable {
 			maxStat = Math.max(maxStat, stat);
 			minStat = Math.min(minStat, stat);
 			if (verbose) {
-				String label = log1.getLabels().get(i);
 				Log.info(label + (label.length() < space.length() ? space.substring(label.length()) : " ") + " " + stat);
 				
 			}
@@ -209,6 +209,10 @@ public class DistributionComparator extends Runnable {
 			min = Math.min(min, d);
 			max = Math.max(max, d);
 		}
+		if (max == min) {
+			return 0;
+		}
+		
 		mean /= n;
 		double stdev0 = Math.sqrt((sumsq * sumsq - n * mean * mean) / (n-1));
 		double stdev = 0.9 * stdev0 / Math.pow(n, 0.2);
@@ -275,7 +279,10 @@ public class DistributionComparator extends Runnable {
 
 	private double calcMeanStat(double mean1, double mean2, double stdErr1, double stdErr2) {
 		double diff = Math.abs(mean1 - mean2);
-		double stdev =  stdErr1 * 2 + stdErr2 * 2; 
+		double stdev =  stdErr1 * 2 + stdErr2 * 2;
+		if (stdev == 0) {
+			return 0;
+		}
 		return diff/stdev;
 	}
 
@@ -283,9 +290,29 @@ public class DistributionComparator extends Runnable {
 		double [] x0 = toDouble(trace1);
 		double [] y0 = toDouble(trace2);
 		
+		if (isConstant(x0) && isConstant(y0)) {
+			if (x0[0] == y0[0]) {
+				return 1.0;
+			} else {
+				return 0.0;
+			}
+		}
+		
 		KolmogorovSmirnovTest test = new KolmogorovSmirnovTest();
 		double p = test.kolmogorovSmirnovTest(x0, y0);
 		return p;
+	}
+	
+	
+
+	private boolean isConstant(double[] x0) {
+		double v = x0[0];
+		for (int i = 1; i < x0.length; i++) {
+			if (x0[i] != v) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private double[] toDouble(Double[] x) {

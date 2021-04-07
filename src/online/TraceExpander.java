@@ -77,6 +77,7 @@ public class TraceExpander extends BaseStateExpander {
 	private PrintStream multiStateOut;
 	private boolean autoConverge;
 	private ConvergenceCriterion criterion;
+	private int cycle;
 
 	@Override
 	public void initAndValidate() {
@@ -91,7 +92,7 @@ public class TraceExpander extends BaseStateExpander {
 		initialise();
 		
 		
-		int cycle = 0;
+		cycle = 0;
 		boolean isResuming = importModels();
 		int n = getStateCount();
 		int burnIn = skipBurnin(isResuming, n);
@@ -462,6 +463,9 @@ public class TraceExpander extends BaseStateExpander {
 		sampleNr++;
 		
 		// print progress bar:
+		if (sampleNr == 0) {
+			System.err.print("Cycle " + cycle + ": ");
+		}
 		if (sampleNr % 1 == 0) {
 			if (sampleNr % 10 == 0) {
 				System.err.print("|");
