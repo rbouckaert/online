@@ -13,7 +13,6 @@ import beast.app.util.LogFile;
 import beast.core.Description;
 import beast.core.Input;
 import beast.core.util.Log;
-import beast.math.util.MathUtils;
 import beast.core.Runnable;
 import beast.util.LogAnalyser;
 

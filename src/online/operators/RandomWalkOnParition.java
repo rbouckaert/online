@@ -5,7 +5,6 @@ import beast.core.Input;
 import beast.core.Operator;
 import beast.core.Input.Validate;
 import beast.core.parameter.IntegerParameter;
-import beast.evolution.tree.TreeInterface;
 import beast.util.Randomizer;
 
 @Description("A random walk operator that selects a random dimension of the integer parameter from a partition "

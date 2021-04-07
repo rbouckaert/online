@@ -17,7 +17,6 @@ package online.math;
  * limitations under the License.
  */
 
-import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.commons.math3.exception.MathArithmeticException;

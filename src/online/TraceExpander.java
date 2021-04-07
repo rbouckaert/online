@@ -63,6 +63,7 @@ public class TraceExpander extends BaseStateExpander {
 			"If not set to 'none', the chain keeps afterburning (with chainLength steps) till all items in trace log converge. " +
     		DistributionComparator.convergenceCriterionDescription, 
     		ConvergenceCriterion.KDE, ConvergenceCriterion.values());
+    final public Input<Integer> maxCycleInput = new Input<>("maxCycle", "maximum number of cycles before stopping. Ignored if negative (which is the default)", -1);
     
     
     private int nrOfThreads;
@@ -107,10 +108,13 @@ public class TraceExpander extends BaseStateExpander {
 		
 		String xml2Path = xml2Input.get().getAbsolutePath();
 		close(cycle, xml2Path);
-		
+
+		Log.info("Cycle " + cycle + " done in " + (System.currentTimeMillis()-start)/1000 + " seconds with " + nrOfThreads + " threads");
+
 		
 		do {
 			// prep for next cycle
+			long cycleStart = System.currentTimeMillis();
 			cycle++;
 			isResuming = true;
 			multiStateOut = new PrintStream(xml2Path + ".state.multi.tmp");
@@ -128,7 +132,8 @@ public class TraceExpander extends BaseStateExpander {
 			}
 			
 			close(cycle, xml2Path);
-		} while (!converged(cycle));
+			Log.info("Cycle " + cycle + " done in " + (System.currentTimeMillis()-cycleStart)/1000 + " seconds with " + nrOfThreads + " threads");
+		} while (cycle != maxCycleInput.get() && !converged(cycle));
 		
 		Long end = System.currentTimeMillis();
 		Log.info("Done in " + (end-start)/1000 + " seconds with " + nrOfThreads + " threads");
@@ -165,6 +170,7 @@ public class TraceExpander extends BaseStateExpander {
 			case SplitR:
 			case KDE:
 			case mean:
+			case corr:
 				return maxStat < thresholdInput.get();
 			case KS:
 				return minStat > thresholdInput.get();
@@ -456,8 +462,8 @@ public class TraceExpander extends BaseStateExpander {
 		sampleNr++;
 		
 		// print progress bar:
-		if (sampleNr % 10 == 0) {
-			if (sampleNr % 50 == 0) {
+		if (sampleNr % 1 == 0) {
+			if (sampleNr % 10 == 0) {
 				System.err.print("|");
 			} else {
 				System.err.print(".");

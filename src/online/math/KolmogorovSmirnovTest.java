@@ -18,6 +18,7 @@ package online.math;
  * limitations under the License.
  */
 
+
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -27,7 +28,7 @@ import java.util.TreeSet;
 
 //import org.apache.commons.math3.distribution.EnumeratedRealDistribution;
 import org.apache.commons.math3.distribution.RealDistribution;
-import org.apache.commons.math3.distribution.UniformRealDistribution;
+//import org.apache.commons.math3.distribution.UniformRealDistribution;
 //import org.apache.commons.math3.exception.InsufficientDataException;
 import org.apache.commons.math3.exception.MathArithmeticException;
 import org.apache.commons.math3.exception.MathInternalError;
@@ -43,13 +44,13 @@ import org.apache.commons.math3.linear.Array2DRowFieldMatrix;
 import org.apache.commons.math3.linear.FieldMatrix;
 import org.apache.commons.math3.linear.MatrixUtils;
 import org.apache.commons.math3.linear.RealMatrix;
-import org.apache.commons.math3.random.JDKRandomGenerator;
+//import org.apache.commons.math3.random.JDKRandomGenerator;
 import org.apache.commons.math3.random.RandomGenerator;
 import org.apache.commons.math3.random.Well19937c;
 //import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.apache.commons.math3.util.FastMath;
 import org.apache.commons.math3.util.MathArrays;
-import org.apache.commons.math3.util.MathUtils;
+//import org.apache.commons.math3.util.MathUtils;
 
 /**
  * Implementation of the <a href="http://en.wikipedia.org/wiki/Kolmogorov-Smirnov_test">

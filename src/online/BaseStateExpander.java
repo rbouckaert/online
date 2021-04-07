@@ -193,7 +193,7 @@ public class BaseStateExpander extends beast.core.Runnable {
 		if (i != j) {
 			for (int k = 0; k < metaData.size(); k++) {
 				Parameter<?> p = metaData.get(k);
-				if (i < p.getDimension()) {
+				if (j < p.getDimension()) {
 					Parameter<?> p0 = originalMetaData.get(k);
 					if (p instanceof RealParameter) {
 						((RealParameter) p).setValue(j, (Double)(p0.getValue(i)));
@@ -670,7 +670,7 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 			}
 		}
 		for (StateNode sn : model.state.stateNodeInput.get()) {
-			if (sn instanceof Parameter && ((Parameter)sn).getDimension() > model.tree.getLeafNodeCount() && isClockModelParameter((Parameter)sn)) {
+			if (sn instanceof Parameter && ((Parameter<?>)sn).getDimension() > model.tree.getLeafNodeCount() && isClockModelParameter((Parameter<?>)sn)) {
 				Node [] nodes = model.tree.getNodesAsArray();
 				for (int j = 0; j < ((Parameter<?>)sn).getDimension(); j++) {
 					nodes[j].setMetaData(sn.getID(), ((Parameter<?>)sn).getValue(j));
