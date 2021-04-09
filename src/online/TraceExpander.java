@@ -55,14 +55,14 @@ public class TraceExpander extends BaseStateExpander {
 	 */
     final public Input<Double> thresholdInput = new Input<>("threshold", "threshold appropriate for convergence criterion, "
     		+ "e.g. maximum acceptable value of Gelman Rubin statistic, or minimum p-value for KS test. "
-			+ "Set 'criterion' to 'none' to stop after first cycle.", 1.01);
+			+ "Set 'criterion' to 'none' to stop after first cycle.", 0.4);
     
 	final public Input<String> tempDirInput = new Input<>("tempDir","directory where temporary files are written."
 			+ "(Ignored if maxRInput < 1).", "/tmp/");
     final public Input<ConvergenceCriterion> criterionInput = new Input<>("criterion",
 			"If not set to 'none', the chain keeps afterburning (with chainLength steps) till all items in trace log converge. " +
     		DistributionComparator.convergenceCriterionDescription, 
-    		ConvergenceCriterion.KDE, ConvergenceCriterion.values());
+    		ConvergenceCriterion.corr, ConvergenceCriterion.values());
     final public Input<Integer> maxCycleInput = new Input<>("maxCycle", "maximum number of cycles before stopping. Ignored if negative (which is the default)", -1);
     
     
@@ -70,7 +70,7 @@ public class TraceExpander extends BaseStateExpander {
     private static ExecutorService exec;
     private static CountDownLatch countDown;
 	private List<Logger> loggers;
-	private Model model2;
+	private Model model1, model2;
 	private long sampleNr;
 	private BufferedReader fin;
 	private String multiStateInputFile;
@@ -112,7 +112,7 @@ public class TraceExpander extends BaseStateExpander {
 
 		Log.info("Cycle " + cycle + " done in " + (System.currentTimeMillis()-start)/1000 + " seconds with " + nrOfThreads + " threads");
 
-		
+		boolean converged;
 		do {
 			// prep for next cycle
 			long cycleStart = System.currentTimeMillis();
@@ -133,8 +133,13 @@ public class TraceExpander extends BaseStateExpander {
 			}
 			
 			close(cycle, xml2Path);
-			Log.info("Cycle " + cycle + " done in " + (System.currentTimeMillis()-cycleStart)/1000 + " seconds with " + nrOfThreads + " threads");
-		} while (cycle != maxCycleInput.get() && !converged(cycle));
+			converged = converged(cycle);
+			Log.info("Cycle " + cycle + " done in " + (System.currentTimeMillis()-cycleStart)/1000 + " seconds with " + nrOfThreads + " threads "
+					+ "has " + (converged ? "indeed" : "not") + " converged");
+			
+		} while (cycle != maxCycleInput.get() && !converged);
+		
+		combine(cycle, xml2Path);
 		
 		Long end = System.currentTimeMillis();
 		Log.info("Done in " + (end-start)/1000 + " seconds with " + nrOfThreads + " threads");
@@ -171,8 +176,9 @@ public class TraceExpander extends BaseStateExpander {
 			case SplitR:
 			case KDE:
 			case mean:
-			case corr:
 				return maxStat < thresholdInput.get();
+			case corr:
+				return maxStat < thresholdInput.get() && Math.abs(minStat) < thresholdInput.get();
 			case KS:
 				return minStat > thresholdInput.get();
 		}
@@ -267,7 +273,9 @@ public class TraceExpander extends BaseStateExpander {
 				new File(xml2Path + ".state.multi.tmp").toPath(), 
 				new File(xml2Path + ".state.multi").toPath(),
 				java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-		
+	}
+	
+	private void combine(int cycle, String xml2Path) throws IOException {
 		if (autoConverge && cycle > 0) {
 			for (Logger logger : loggers) {
 				if (!logger.isLoggingToStdout()) {
@@ -305,6 +313,8 @@ public class TraceExpander extends BaseStateExpander {
     	int from; 
     	int to;
     	boolean afterBurnOnly;
+    	Model model1, model2;
+    	BaseStateExpander expander;
 
         CoreRunnable(int from, int to, boolean afterBurnOnly) {
     		this.from = from;
@@ -315,23 +325,25 @@ public class TraceExpander extends BaseStateExpander {
         @Override
 		public void run() {
             try {
-            	BaseStateExpander expander = new BaseStateExpander(chainLengthInput.get());
-        		Model model1 = getModelFromFile(xml1Input.get());
-        		Model model2 = getModelFromFile(
-        				xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]") ? 
-        				xml1Input.get():
-        				xml2Input.get());
-        		// restore operator settings, if possible
-        		String stateFile = stateFileInput.get().getPath();
-        		if (stateFile == null || stateFile.equals("[[none]]")) {
-        			stateFile = xml1Input.get().getPath() + ".state";
-        		}		
-        		if (new File(stateFile).exists()) {
-        	        model1.operatorSchedule.setStateFileName(stateFile);
-        	        model1.operatorSchedule.restoreFromFile();	
-        	        model2.operatorSchedule.setStateFileName(stateFile);
-        	        model2.operatorSchedule.restoreFromFile();	
-        		}
+            	if (model1 == null) {
+                	expander = new BaseStateExpander(chainLengthInput.get());
+	        		this.model1 = getModelFromFile(xml1Input.get());
+	        		this.model2 = getModelFromFile(
+	        				xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]") ? 
+	        				xml1Input.get():
+	        				xml2Input.get());
+	        		// restore operator settings, if possible
+	        		String stateFile = stateFileInput.get().getPath();
+	        		if (stateFile == null || stateFile.equals("[[none]]")) {
+	        			stateFile = xml1Input.get().getPath() + ".state";
+	        		}		
+	        		if (new File(stateFile).exists()) {
+	        	        model1.operatorSchedule.setStateFileName(stateFile);
+	        	        model1.operatorSchedule.restoreFromFile();	
+	        	        model2.operatorSchedule.setStateFileName(stateFile);
+	        	        model2.operatorSchedule.restoreFromFile();	
+	        		}
+            	}
 
             	for (int i = from; i < to; i++) {
         			String xml = nextState();
@@ -353,15 +365,24 @@ public class TraceExpander extends BaseStateExpander {
         }
     } // CoreRunnable
     
+	private CoreRunnable [] coreRunnable;
+	
 	private void processThreaded(int n, boolean afterBurnOnly)  throws IOException, InterruptedException {
         countDown = new CountDownLatch(nrOfThreads);
         // kick off the threads
         int from = 0;
         int delta = Math.max(1, n / nrOfThreads); 
         int to = delta;
+        if (coreRunnable == null) {
+        	coreRunnable = new CoreRunnable[nrOfThreads];
+        }
         for (int i = 0; i < nrOfThreads; i++) {
-            CoreRunnable coreRunnable = new CoreRunnable(from, to, afterBurnOnly);
-            exec.execute(coreRunnable);
+        	if (coreRunnable[i] == null) {
+        		coreRunnable[i] = new CoreRunnable(from, to, afterBurnOnly);
+        	} else {
+        		coreRunnable[i].afterBurnOnly = afterBurnOnly;
+        	}
+            exec.execute(coreRunnable[i]);
             from = to;
             to += delta;
             if (to > n) {
@@ -372,19 +393,20 @@ public class TraceExpander extends BaseStateExpander {
 	}
 
 	private void processUnThreaded(int n, boolean afterBurnOnly)  throws IOException, SAXException, ParserConfigurationException, XMLParserException {
-		Model model1 = getModelFromFile(xml1Input.get());
-		
-		String stateFile = stateFileInput.get().getPath();
-		if (stateFile == null || stateFile.equals("[[none]]")) {
-			stateFile = xml1Input.get().getPath() + ".state";
-		}		
-		if (new File(stateFile).exists()) {
-	        model1.operatorSchedule.setStateFileName(stateFile);
-	        model1.operatorSchedule.restoreFromFile();	
-	        model2.operatorSchedule.setStateFileName(stateFile);
-	        model2.operatorSchedule.restoreFromFile();	
+		if (model1 == null) {
+			model1 = getModelFromFile(xml1Input.get());
+			
+			String stateFile = stateFileInput.get().getPath();
+			if (stateFile == null || stateFile.equals("[[none]]")) {
+				stateFile = xml1Input.get().getPath() + ".state";
+			}		
+			if (new File(stateFile).exists()) {
+		        model1.operatorSchedule.setStateFileName(stateFile);
+		        model1.operatorSchedule.restoreFromFile();	
+		        model2.operatorSchedule.setStateFileName(stateFile);
+		        model2.operatorSchedule.restoreFromFile();	
+			}
 		}
-		
 
         for (int i = 0; i < n; i++) {
 			// get state from file
@@ -463,7 +485,7 @@ public class TraceExpander extends BaseStateExpander {
 		sampleNr++;
 		
 		// print progress bar:
-		if (sampleNr == 0) {
+		if (sampleNr == 1) {
 			System.err.print("Cycle " + cycle + ": ");
 		}
 		if (sampleNr % 1 == 0) {
