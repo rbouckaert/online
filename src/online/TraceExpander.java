@@ -112,6 +112,18 @@ public class TraceExpander extends BaseStateExpander {
 
 		Log.info("Cycle " + cycle + " done in " + (System.currentTimeMillis()-start)/1000 + " seconds with " + nrOfThreads + " threads");
 
+		if (autoConverge) {
+			autoConverge(isResuming, n, burnIn, xml2Path);
+
+		}
+		
+		Long end = System.currentTimeMillis();
+		Log.info("Done in " + (end-start)/1000 + " seconds with " + nrOfThreads + " threads");
+		System.exit(0);
+	}
+
+	
+	private void autoConverge(boolean isResuming, int n, int burnIn, String xml2Path) throws IOException, XMLParserException, SAXException, ParserConfigurationException, InterruptedException {
 		boolean converged;
 		do {
 			// prep for next cycle
@@ -139,14 +151,9 @@ public class TraceExpander extends BaseStateExpander {
 			
 		} while (cycle != maxCycleInput.get() && !converged);
 		
-		combine(cycle, xml2Path);
-		
-		Long end = System.currentTimeMillis();
-		Log.info("Done in " + (end-start)/1000 + " seconds with " + nrOfThreads + " threads");
-		System.exit(0);
+		combine(cycle, xml2Path);		
 	}
 
-	
 	private boolean converged(int cycle) throws IOException {
 		if (!autoConverge) {
 			return true;

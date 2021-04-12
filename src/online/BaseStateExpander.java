@@ -60,6 +60,7 @@ public class BaseStateExpander extends beast.core.Runnable {
 			+ "If no additional sequences are deteceted this is set to 0.", 0.75);
 	
 	final public Input<Long> seedInput = new Input<>("seed", "Specify a random number generator seed");
+	final public Input<String> definitionsInput = new Input<>("definitions","comma separated list of definitions used in the XML (like the -D option for BEAST)", "");
 
 	Map<String, Integer> map;
 	Node internalNode;
@@ -416,8 +417,9 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 //	} catch (IOException e) {
 //		e.printStackTrace();
 //	}
-		
-		XMLParser parser = new XMLParser();
+	
+		Map<String, String> parserDefinitions = getParserDefinitions();
+		XMLParser parser = new XMLParser(parserDefinitions, null, false);
 		mcmc = (MCMC) parser.parseBareFragment(xml, true);
 		
 		return mcmc;
@@ -655,7 +657,9 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 		if (xmlFile == null || xmlFile.getName().equals("[[none]]")) {
 			throw new IllegalArgumentException("XML file not specified");
 		}
-		XMLParser parser = new XMLParser();
+        Map<String, String> parserDefinitions = getParserDefinitions();
+
+		XMLParser parser = new XMLParser(parserDefinitions);
 		Runnable runnable = parser.parseFile(xmlFile);
 		Model model = new Model();
 		model.state = (State) runnable.getInputValue("state");
@@ -687,6 +691,33 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 		}
 		return model;
 	} // getModelFromFile
+	
+	private Map<String, String> getParserDefinitions() {
+        Map<String, String> parserDefinitions = new HashMap<>();
+        String definitions = definitionsInput.get();
+        String [] strs = definitions.split("=",-1);
+        for (int eqIdx = 0; eqIdx<strs.length-1; eqIdx++) {
+            int lastCommaIdx = strs[eqIdx].lastIndexOf(",");
+
+            if (lastCommaIdx != -1 && eqIdx == 0)
+                throw new IllegalArgumentException("Argument to 'definitions' is not well-formed: expecting comma-separated name=value pairs");
+
+            String name = strs[eqIdx].substring(lastCommaIdx+1);
+
+            lastCommaIdx = strs[eqIdx+1].lastIndexOf(",");
+            String value;
+            if (eqIdx+1 == strs.length-1) {
+                value = strs[eqIdx+1];
+            } else {
+                if (lastCommaIdx == -1)
+                    throw new IllegalArgumentException("Argument to 'definitions' is not well-formed: expecting comma-separated name=value pairs");
+
+                value = strs[eqIdx+1].substring(0, lastCommaIdx);
+            }
+            parserDefinitions.put(name, value);
+		}
+		return parserDefinitions;
+	}
 
 
 }
