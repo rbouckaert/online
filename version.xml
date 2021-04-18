@@ -1,0 +1,13 @@
+<package name='online' version='0.0.1'>
+	<depends on='beast2' atleast='2.6.0'/>
+	<depends on='BEASTLabs' atleast='1.9.6'/>
+	
+	<packageapp description="StateExpander creates good starting state from an old starting state"
+              class="online.StateExpander"
+              args=""
+            />
+    <packageapp description="TraceExpander creates a trace and tree log from previous multi-state file in parallel"
+              class="online.TraceExpander"
+              args=""
+            />
+</package>
