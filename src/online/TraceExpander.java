@@ -2,9 +2,11 @@ package online;
 
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -45,6 +47,7 @@ public class TraceExpander extends BaseStateExpander {
     final public Input<Integer> maxNrOfThreadsInput = new Input<>("threads","maximum number of threads to use, if not specified the number of available cores is used (default)");
     final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of states in multiStateFile to be used as burn-in (these will be ignored)", 10);
     final public Input<Boolean> overwriteInput = new Input<>("overwrite", "overwrite existing tree and trace files", true);
+    final public Input<Boolean> verboseInput = new Input<>("verbose", "show more information if true", false);
 
 	/**
 	 * https://www.stata.com/new-in-stata/gelman-rubin-convergence-diagnostic/
@@ -283,6 +286,13 @@ public class TraceExpander extends BaseStateExpander {
 	}
 	
 	private void combine(int cycle, String xml2Path) throws IOException {
+		PrintStream stdout = System.out;
+		PrintStream stderr = System.err;
+        if (!verboseInput.get()) {
+			Log.setLevel(Log.Level.error);
+			System.setOut(nullStream);
+			System.setErr(nullStream);
+        }
 		if (autoConverge && cycle > 0) {
 			for (Logger logger : loggers) {
 				if (!logger.isLoggingToStdout()) {
@@ -293,12 +303,18 @@ public class TraceExpander extends BaseStateExpander {
 					if (to.startsWith("cycle") && to.indexOf("_") > 0) {
 						to = to.substring(to.indexOf("_") + 1);
 					}
+					Log.err.println("Combining " + from1 + " + " + from2 + " => " + to);
 					LogCombiner.main(new String[]{
 							"-b", "0", "-log", from1, "-log", from2, "-o", to
 					   });
 				}
 			}
 		}
+        if (!verboseInput.get()) {
+			Log.setLevel(Log.Level.info);
+        	System.setOut(stdout);
+        	System.setErr(stderr);        	
+        }
 		
 	}
 
@@ -327,31 +343,36 @@ public class TraceExpander extends BaseStateExpander {
     		this.from = from;
     		this.to = to;
     		this.afterBurnOnly = afterBurnOnly;
+    		
+        	expander = new BaseStateExpander(chainLengthInput.get());
+        	
+
+    		try {
+	    		this.model1 = getModelFromFile(xml1Input.get());
+	    		this.model2 = getModelFromFile(
+	    				xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]") ? 
+	    				xml1Input.get():
+	    				xml2Input.get());
+	    		
+	    		// restore operator settings, if possible
+	    		String stateFile = stateFileInput.get().getPath();
+	    		if (stateFile == null || stateFile.equals("[[none]]")) {
+	    			stateFile = xml1Input.get().getPath() + ".state";
+	    		}		
+	    		if (new File(stateFile).exists()) {
+	    	        model1.operatorSchedule.setStateFileName(stateFile);
+	    	        model1.operatorSchedule.restoreFromFile();	
+	    	        model2.operatorSchedule.setStateFileName(stateFile);
+	    	        model2.operatorSchedule.restoreFromFile();	
+	    		}
+    		} catch (IOException | SAXException | ParserConfigurationException | XMLParserException e) {
+    			
+    		}
         }
 
         @Override
 		public void run() {
             try {
-            	if (model1 == null) {
-                	expander = new BaseStateExpander(chainLengthInput.get());
-	        		this.model1 = getModelFromFile(xml1Input.get());
-	        		this.model2 = getModelFromFile(
-	        				xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]") ? 
-	        				xml1Input.get():
-	        				xml2Input.get());
-	        		// restore operator settings, if possible
-	        		String stateFile = stateFileInput.get().getPath();
-	        		if (stateFile == null || stateFile.equals("[[none]]")) {
-	        			stateFile = xml1Input.get().getPath() + ".state";
-	        		}		
-	        		if (new File(stateFile).exists()) {
-	        	        model1.operatorSchedule.setStateFileName(stateFile);
-	        	        model1.operatorSchedule.restoreFromFile();	
-	        	        model2.operatorSchedule.setStateFileName(stateFile);
-	        	        model2.operatorSchedule.restoreFromFile();	
-	        		}
-            	}
-
             	for (int i = from; i < to; i++) {
         			String xml = nextState();
         			if (!afterBurnOnly) {
@@ -373,6 +394,22 @@ public class TraceExpander extends BaseStateExpander {
     } // CoreRunnable
     
 	private CoreRunnable [] coreRunnable;
+	private static   PrintStream nullStream = new PrintStream(new ByteArrayOutputStream() {
+		@Override
+	    public void write(int b) {
+	      // do nothing
+	    }
+
+	    @Override
+	    public void write(byte[] b, int off, int len) {
+	      // do nothing
+	    }
+
+	    @Override
+	    public void writeTo(OutputStream out) throws IOException {
+	      // do nothing
+	    }
+    });
 	
 	private void processThreaded(int n, boolean afterBurnOnly)  throws IOException, InterruptedException {
         countDown = new CountDownLatch(nrOfThreads);
@@ -382,6 +419,13 @@ public class TraceExpander extends BaseStateExpander {
         int to = delta;
         if (coreRunnable == null) {
         	coreRunnable = new CoreRunnable[nrOfThreads];
+        }
+		PrintStream stdout = System.out;
+		PrintStream stderr = System.err;
+        if (!verboseInput.get()) {
+			Log.setLevel(Log.Level.error);
+			System.setOut(nullStream);
+			System.setErr(nullStream);
         }
         for (int i = 0; i < nrOfThreads; i++) {
         	if (coreRunnable[i] == null) {
@@ -397,6 +441,11 @@ public class TraceExpander extends BaseStateExpander {
             }
         }
         countDown.await();
+        if (!verboseInput.get()) {
+    		Log.setLevel(Log.Level.info);
+        	System.setOut(stdout);
+        	System.setErr(stderr);
+        }
 	}
 
 	private void processUnThreaded(int n, boolean afterBurnOnly)  throws IOException, SAXException, ParserConfigurationException, XMLParserException {
@@ -493,13 +542,13 @@ public class TraceExpander extends BaseStateExpander {
 		
 		// print progress bar:
 		if (sampleNr == 1) {
-			System.err.print("Cycle " + cycle + ": ");
+			Log.err.print("Cycle " + cycle + ": ");
 		}
 		if (sampleNr % 1 == 0) {
 			if (sampleNr % 10 == 0) {
-				System.err.print("|");
+				Log.err.print("|");
 			} else {
-				System.err.print(".");
+				Log.err.print(".");
 			}
 		}
 	} // logState
