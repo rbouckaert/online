@@ -180,8 +180,10 @@ public class TraceExpander extends BaseStateExpander {
  		}
 		
 		switch (criterion) {
-			case none:
+			case always:
 				return true;
+			case never:
+				return false;
 			case GR:
 			case SplitR:
 			case KDE:
@@ -248,7 +250,7 @@ public class TraceExpander extends BaseStateExpander {
 			Randomizer.setSeed(seedInput.get());
 		}
 		
-		autoConverge = !criterionInput.get().equals(ConvergenceCriterion.none);
+		autoConverge = !criterionInput.get().equals(ConvergenceCriterion.always);
 	}
 
 	private boolean importModels() throws IOException, SAXException, ParserConfigurationException, XMLParserException {

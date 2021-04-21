@@ -421,13 +421,13 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
         xml = xml.replaceAll("\\bbeast.evolution.likelihood.ThreadedTreeLikelihood\\b", "beastbooster.likelihood.DuckThreadedTreeLikelihood");
         xml = xml.replaceAll("\\bbeast.evolution.likelihood.TreeLikelihood\\b", "beastbooster.likelihood.DuckTreeLikelihood");
 		
-	try {
-			PrintStream out = new PrintStream(new File("/tmp/beast.xml"));
-			out.println(xml);
-			out.close();
-	} catch (IOException e) {
-		e.printStackTrace();
-	}
+//	try {
+//			PrintStream out = new PrintStream(new File("/tmp/beast.xml"));
+//			out.println(xml);
+//			out.close();
+//	} catch (IOException e) {
+//		e.printStackTrace();
+//	}
 	
 		Map<String, String> parserDefinitions = getParserDefinitions();
 		XMLParser parser = new XMLParser(parserDefinitions, null, false);

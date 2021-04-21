@@ -15,6 +15,7 @@
 	<property name="release_dir" value="release" />
 	<property name="distonline" location="${buildonline}/dist" />
 	<property name="BEASTLabsclasspath" location="../BEASTLabs/build" />
+	<property name="buildbeastbooster" location="../beastbooster/build" />
 	<property name="beast2path" location="../beast2" />
 	<property name="libBeast2" location="${beast2path}/lib" />
 	<property name="srcBeast2" location="${beast2path}/src" />
@@ -42,6 +43,7 @@
         <fileset dir="${libBeast2}" includes="colt.jar"/>
         <pathelement path="${beast2classpath}"/>
         <pathelement path="${BEASTLabsclasspath}"/>
+        <pathelement path="${buildbeastbooster}"/>
 	</path>
 
 	<!-- start -->
@@ -201,7 +203,7 @@
 			<fileset file="version.xml"/>
 		</copy>
 		<copy todir="${Add_on_dir}/examples">
-			<fileset dir="examples" />
+			<fileset dir="examples" includes="*.xml" />
 		</copy>
 		<copy todir="${Add_on_dir}/lib">
 			<fileset dir="${distonline}" includes="online.addon.jar" />

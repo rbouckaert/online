@@ -20,9 +20,10 @@ import beast.util.LogAnalyser;
 public class DistributionComparator extends Runnable {
 
 	
-	public enum ConvergenceCriterion {GR, SplitR, KS, mean, KDE, corr, none}
+	public enum ConvergenceCriterion {GR, SplitR, KS, mean, KDE, corr, never, always}
 	final public static String convergenceCriterionDescription = "Criterion for testig convergence:"
-			+ "none for always accepting equality, "
+			+ "always for always accepting equality, "
+			+ "never for never accepting equality, "
     		+ "GR for Gelman-Rubin statistic, "
     		+ "SplitR for use split-R estimate of Gelman-Rubin statistic, "
     		+ "KS for Kolmogorov Smirnov test at p=5% "
