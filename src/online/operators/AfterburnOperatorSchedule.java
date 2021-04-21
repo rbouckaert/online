@@ -31,6 +31,9 @@ public class AfterburnOperatorSchedule extends OperatorSchedule {
 			// there are probably no PartitionOperators
 			// carry on with a standard operator
 		}
+		if (subschedulesInput.get().size() != 0) {
+			return subschedulesInput.get().get(0).selectOperator();
+		}
 		return super.selectOperator();
 	}
 }

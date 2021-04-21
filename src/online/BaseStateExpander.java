@@ -32,14 +32,17 @@ import beast.core.parameter.BooleanParameter;
 import beast.core.parameter.IntegerParameter;
 import beast.core.parameter.Parameter;
 import beast.core.parameter.RealParameter;
+import beast.core.util.CompoundDistribution;
 import beast.core.util.Log;
 import beast.evolution.branchratemodel.BranchRateModel;
+import beast.evolution.likelihood.GenericTreeLikelihood;
 import beast.evolution.tree.Node;
 import beast.evolution.tree.TraitSet;
 import beast.evolution.tree.Tree;
 import beast.util.XMLParser;
 import beast.util.XMLParserException;
 import beast.util.XMLProducer;
+import beastbooster.operators.MultiStepOperatorScheduleForSingleTree;
 import online.operators.AfterburnOperatorSchedule;
 import online.operators.ExchangeOnPartition;
 import online.operators.RandomWalkOnParition;
@@ -388,27 +391,35 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 			// set proportion partitioned operators to zero
 			proportionPartitionedInput.setValue(0.0, this);
 		}
-		operators.addAll(model.mcmc.operatorsInput.get());
+		//operators.addAll(model.mcmc.operatorsInput.get());
 
 		
 		Logger screenlog = new Logger();
 		screenlog.initByName("log", model.mcmc.posteriorInput.get(), "logEvery", (int)(long) chainLengthInput.get());
-
-		MCMC mcmc = new MCMC(); 
 		
+		MultiStepOperatorScheduleForSingleTree subschedule = new MultiStepOperatorScheduleForSingleTree();
+		subschedule.initByName("operator", model.mcmc.operatorsInput.get());
+
+		AfterburnOperatorSchedule operatorSchedule = new AfterburnOperatorSchedule();
+		operatorSchedule.initByName("subschedule",subschedule);
+
+		MCMC mcmc = new MCMC(); 		
 		mcmc.initByName(
 				"distribution", model.mcmc.posteriorInput.get(),
 				"state", model.mcmc.startStateInput.get(),
 				"chainLength", chainLengthInput.get(),
 				"operator", operators,
 				"logger", screenlog,
-				"operatorschedule", new AfterburnOperatorSchedule()
+				"operatorschedule", operatorSchedule
 		);
 
 		
 		XMLProducer producer = new XMLProducer();
 		String xml = producer.toRawXML(mcmc);
 		xml = xml.replaceAll("'beast.core.MCMC'", "'online.PartitionMCMC'");
+
+        xml = xml.replaceAll("\\bbeast.evolution.likelihood.ThreadedTreeLikelihood\\b", "beastbooster.likelihood.DuckThreadedTreeLikelihood");
+        xml = xml.replaceAll("\\bbeast.evolution.likelihood.TreeLikelihood\\b", "beastbooster.likelihood.DuckTreeLikelihood");
 		
 //	try {
 //			PrintStream out = new PrintStream(new File("/tmp/beast.xml"));
@@ -425,6 +436,21 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		return mcmc;
 	}
 
+	private Object getTarget(Distribution p) {
+		if (p instanceof GenericTreeLikelihood) {
+			return p;
+		}
+		if (p instanceof CompoundDistribution) {
+			for (Distribution p2 : ((CompoundDistribution)p).pDistributions.get()) {
+				Object t = getTarget(p2);
+				if (t != null) {
+					return t;
+				}
+			}
+		}
+		return null;
+	}
+	
 	private boolean isClockModelParameter(Parameter<?> p) {
 		for (BEASTInterface o : ((BEASTInterface)p).getOutputs()) {
 			if (o instanceof BranchRateModel) {
