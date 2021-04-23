@@ -398,7 +398,6 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		screenlog.initByName("log", model.mcmc.posteriorInput.get(), "logEvery", (int)(long) chainLengthInput.get());
 		
 		MultiStepOperatorScheduleForSingleTree subschedule = new MultiStepOperatorScheduleForSingleTree();
-		subschedule.initByName("operator", model.mcmc.operatorsInput.get());
 
 		AfterburnOperatorSchedule operatorSchedule = new AfterburnOperatorSchedule();
 		operatorSchedule.initByName("subschedule",subschedule);
@@ -412,6 +411,7 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 				"logger", screenlog,
 				"operatorschedule", operatorSchedule
 		);
+		subschedule.initByName("operator", model.mcmc.operatorsInput.get());
 
 		
 		XMLProducer producer = new XMLProducer();
@@ -533,7 +533,10 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	protected double tryBranch(Node newTaxon, Node node, State state, Distribution posterior, Tree tree) {
 
         state.storeCalculationNodes();
-        positionOnBranch(newTaxon, node, tree);
+        boolean success = positionOnBranch(newTaxon, node, tree);
+        if (!success) {
+        	return Double.NEGATIVE_INFINITY;
+        }
         
 //        state.store(-1);
 //        state.setEverythingDirty(true);
@@ -544,7 +547,13 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 		return logP;
 	}
 
-	private void positionOnBranch(Node newTaxon, Node node, Tree tree) {
+	/**
+	 * @param newTaxon
+	 * @param node
+	 * @param tree
+	 * @return if node could successfully be placed on branch
+	 */
+	private boolean positionOnBranch(Node newTaxon, Node node, Tree tree) {
 		// remove attachments of internalNode
 		Node newRoot = null;
 		if (internalNode.isRoot()) {
@@ -567,13 +576,22 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 		} else {
 			parent.removeChild(node);
 			parent.addChild(internalNode);
-			internalNode.setHeight((parent.getHeight() + node.getHeight())/2);		
+			
+			double newHeight = parent.getHeight() + node.getHeight()/2;
+			if (newHeight < newTaxon.getHeight()) {
+				newHeight = newTaxon.getHeight();
+				if (newHeight > parent.getHeight()) {
+					return false;
+				}
+			}
+			internalNode.setHeight(newHeight);		
 		}
 		internalNode.addChild(node);
 		if (newRoot != null) {
 			setRoot(tree, newRoot);
 			internalNode = newRoot;
 		}
+		return true;
 	}
 
 	protected Node removeExclusions(Node node, List<String> taxaToExclude) {

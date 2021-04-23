@@ -98,6 +98,9 @@ public class TraceExpander extends BaseStateExpander {
 		cycle = 0;
 		boolean isResuming = importModels();
 		int n = getStateCount();
+		if (n == 0) {
+			throw new IllegalArgumentException("Cannot find any states in the multi state file");
+		}
 		int burnIn = skipBurnin(isResuming, n);
 		
 		initLoggers(cycle);
