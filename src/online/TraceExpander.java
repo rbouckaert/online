@@ -48,6 +48,9 @@ public class TraceExpander extends BaseStateExpander {
     final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of states in multiStateFile to be used as burn-in (these will be ignored)", 10);
     final public Input<Boolean> overwriteInput = new Input<>("overwrite", "overwrite existing tree and trace files", true);
     final public Input<Boolean> verboseInput = new Input<>("verbose", "show more information if true", false);
+	final public Input<Integer> sampleCountInput = new Input<>("sampleCount", "determines number of samples taken from multiStateFile evenly "
+			+ "selected from multiStateFile. If number of states in multiStateFile > sampleCount some entries may be taken multiple times."
+			+ "If <= 0, use every sample in the multiStateFile (minus burn-in)", 200);
 
 	/**
 	 * https://www.stata.com/new-in-stata/gelman-rubin-convergence-diagnostic/
@@ -81,6 +84,7 @@ public class TraceExpander extends BaseStateExpander {
 	private boolean autoConverge;
 	private ConvergenceCriterion criterion;
 	private int cycle;
+	private int currentSample = 0, sampleCount, availableSamples, currentSampleNr = 0;
 
 	@Override
 	public void initAndValidate() {
@@ -97,20 +101,25 @@ public class TraceExpander extends BaseStateExpander {
 		
 		cycle = 0;
 		boolean isResuming = importModels();
+		sampleCount = sampleCountInput.get();
 		int n = getStateCount();
 		if (n == 0) {
 			throw new IllegalArgumentException("Cannot find any states in the multi state file");
 		}
 		int burnIn = skipBurnin(isResuming, n);
+		if (sampleCount <= 0) {
+			sampleCount = n - burnIn;
+		}
+		availableSamples = n - burnIn;
 		
 		initLoggers(cycle);
 		
 		sampleNr = 0;
 		if (nrOfThreads == 1) {
-			processUnThreaded(n - burnIn, false);
+			processUnThreaded(false);
 		} else {
 			// split work over k threads, with work for (n - burnIn)/k states each
-			processThreaded(n - burnIn, false);
+			processThreaded(false);
 		}
 		
 		String xml2Path = xml2Input.get().getAbsolutePath();
@@ -119,7 +128,8 @@ public class TraceExpander extends BaseStateExpander {
 		Log.info("Cycle " + cycle + " done in " + (System.currentTimeMillis()-start)/1000 + " seconds with " + nrOfThreads + " threads");
 
 		if (autoConverge) {
-			autoConverge(isResuming, n, burnIn, xml2Path);
+			availableSamples = sampleCount;
+			autoConverge(isResuming, burnIn, xml2Path);
 
 		}
 		
@@ -129,7 +139,7 @@ public class TraceExpander extends BaseStateExpander {
 	}
 
 	
-	private void autoConverge(boolean isResuming, int n, int burnIn, String xml2Path) throws IOException, XMLParserException, SAXException, ParserConfigurationException, InterruptedException {
+	private void autoConverge(boolean isResuming, int burnIn, String xml2Path) throws IOException, XMLParserException, SAXException, ParserConfigurationException, InterruptedException {
 		boolean converged;
 		do {
 			// prep for next cycle
@@ -142,12 +152,12 @@ public class TraceExpander extends BaseStateExpander {
 
 			initLoggers(cycle);
 			
-			sampleNr = 0;
+			sampleNr = 0; currentSample = 0; currentSampleNr = 0;
 			if (nrOfThreads == 1) {
-				processUnThreaded(n - burnIn, true);
+				processUnThreaded(true);
 			} else {
 				// split work over k threads, with work for (n - burnIn)/k states each
-				processThreaded(n - burnIn, true);
+				processThreaded(true);
 			}
 			
 			close(cycle, xml2Path);
@@ -331,7 +341,12 @@ public class TraceExpander extends BaseStateExpander {
 			Log.info("Skipping " + burnIn + " states as burn-in");
 		}
 		for (int i = 0; i < burnIn; i++) {
-			nextState();
+			while (fin.ready()) {
+				String str = fin.readLine();
+				if (str.startsWith("</itsabeastystatewerein>")) {
+					break;
+				}
+			}
 		}
 		return burnIn;
 	}
@@ -390,7 +405,7 @@ public class TraceExpander extends BaseStateExpander {
         			logState(model2.state);
             	}
             } catch (Exception e) {
-                Log.err.println("Something went wrong in a calculation of " + from + " " + to);
+                Log.err.println("Something went wrong in a calculation of " + from + " " + to + ": " + e.getMessage());
                 e.printStackTrace();
                 System.exit(1);
             }
@@ -416,11 +431,11 @@ public class TraceExpander extends BaseStateExpander {
 	    }
     });
 	
-	private void processThreaded(int n, boolean afterBurnOnly)  throws IOException, InterruptedException {
+	private void processThreaded(boolean afterBurnOnly)  throws IOException, InterruptedException {
         countDown = new CountDownLatch(nrOfThreads);
         // kick off the threads
         int from = 0;
-        int delta = Math.max(1, n / nrOfThreads); 
+        int delta = Math.max(1, sampleCount / nrOfThreads); 
         int to = delta;
         if (coreRunnable == null) {
         	coreRunnable = new CoreRunnable[nrOfThreads];
@@ -441,8 +456,8 @@ public class TraceExpander extends BaseStateExpander {
             exec.execute(coreRunnable[i]);
             from = to;
             to += delta;
-            if (to > n) {
-            	to = n;
+            if (to > sampleCount) {
+            	to = sampleCount;
             }
         }
         countDown.await();
@@ -453,7 +468,7 @@ public class TraceExpander extends BaseStateExpander {
         }
 	}
 
-	private void processUnThreaded(int n, boolean afterBurnOnly)  throws IOException, SAXException, ParserConfigurationException, XMLParserException {
+	private void processUnThreaded(boolean afterBurnOnly)  throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		if (model1 == null) {
 			model1 = getModelFromFile(xml1Input.get());
 			
@@ -469,7 +484,7 @@ public class TraceExpander extends BaseStateExpander {
 			}
 		}
 
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < sampleCount; i++) {
 			// get state from file
 			String xml = nextState();
 			
@@ -490,13 +505,42 @@ public class TraceExpander extends BaseStateExpander {
 		}
 	}
 
+	
+	private String prevStartState = null;
 	synchronized private String nextState() throws IOException {
+		int target = (currentSampleNr + 1)* availableSamples / sampleCount;
+		if (target > availableSamples) {
+			target = availableSamples;
+		}
+		if (currentSample == target) {
+			if (prevStartState == null) {
+				StringBuilder b = new StringBuilder();
+				while (fin.ready()) {
+					String str = fin.readLine();
+					b.append(str);
+					if (str.startsWith("</itsabeastystatewerein>")) {
+						prevStartState = b.toString();
+						currentSampleNr++;
+						return b.toString();
+					}
+				}				
+			}
+			return prevStartState;
+		}
+		
 		StringBuilder b = new StringBuilder();
 		while (fin.ready()) {
 			String str = fin.readLine();
 			b.append(str);
 			if (str.startsWith("</itsabeastystatewerein>")) {
-				return b.toString();
+				currentSample++;
+				if (currentSample == target) {
+					prevStartState = b.toString();
+					currentSampleNr++;
+					return b.toString();
+				} else {
+					b.delete(0, b.length());
+				}
 			}
 		}
 		throw new RuntimeException("Ran out of states in state file");

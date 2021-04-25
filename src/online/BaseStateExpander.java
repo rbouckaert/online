@@ -491,6 +491,7 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		}
 		throw new IllegalArgumentException("Taxon " + taxonName + " not found in tree");
 	}
+	
 	protected void addToPartition(Node node, Set<Integer> values) {
 		if (node.isLeaf()) {
 			return;
@@ -506,7 +507,7 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 
 	protected void tryLeftRight(Node newTaxon, Node child, State state, Distribution posterior, Tree tree, double logP) {
 		double originalHeigt = internalNode.getHeight();
-		
+
 		Node left = child.getLeft();
 		Node right = child.getRight();
 		double logPleft = tryBranch(newTaxon, left, state, posterior, tree);
@@ -519,13 +520,13 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 			return;
 		}
 		if (logPleft < logPright) {
-			if (!right.isLeaf()) {
+			if (!right.isLeaf() && right.getHeight() > newTaxon.getHeight()) {
 				tryLeftRight(newTaxon, right, state, posterior, tree, logPright);
 			}
 			return;
 		}
 		positionOnBranch(newTaxon, left, tree);
-		if (!left.isLeaf()) {
+		if (!left.isLeaf() && left.getHeight() > newTaxon.getHeight()) {
 			tryLeftRight(newTaxon, left, state, posterior, tree, logPleft);
 		}
 	}
@@ -533,6 +534,7 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	protected double tryBranch(Node newTaxon, Node node, State state, Distribution posterior, Tree tree) {
 
         state.storeCalculationNodes();
+        
         boolean success = positionOnBranch(newTaxon, node, tree);
         if (!success) {
         	return Double.NEGATIVE_INFINITY;
@@ -577,7 +579,7 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 			parent.removeChild(node);
 			parent.addChild(internalNode);
 			
-			double newHeight = parent.getHeight() + node.getHeight()/2;
+			double newHeight = (parent.getHeight() + node.getHeight())/2;
 			if (newHeight < newTaxon.getHeight()) {
 				newHeight = newTaxon.getHeight();
 				if (newHeight > parent.getHeight()) {
