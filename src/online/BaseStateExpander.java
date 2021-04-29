@@ -51,7 +51,7 @@ import online.operators.TreePartition;
 import online.operators.UniformOnPartition;
 
 // take rates in account in estimated parameters
-//TODO: take group sizes in account in estimated parameters
+// take group sizes in account in estimated parameters
 // automatically determines chain length, perhaps based on Gelman Rubin or other statistic
 
 @Description("Base class for create a new state extending an input state with different set of taxa")
@@ -86,12 +86,14 @@ public class BaseStateExpander extends beast.core.Runnable {
 
 	
 	protected void updateState(Model model1, Model model2) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
-		// copy pare of the state that model1 and model2 have in common
-		copyCommonStateNodes(model1, model2);
 		
 		List<String> exclusions = new ArrayList<>();
 		List<String> additions = new ArrayList<>();
 		determineInclusionsExclusions(model1, model2, exclusions, additions);
+
+		// copy pare of the state that model1 and model2 have in common
+		copyCommonStateNodes(model1, model2, additions.size() - exclusions.size());
+
 		
 		// remove taxa from model1 that are not in model2
 		removeExclusions(model1.tree.getRoot(), exclusions);
@@ -657,7 +659,7 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 
 
 	// copy all state-nodes unless they are a tree, or they are parameters with different dimensions (like rates)
-	protected void copyCommonStateNodes(Model model1, Model model2) {
+	protected void copyCommonStateNodes(Model model1, Model model2, int deltaTaxaCount) {
 		State state1 = model1.state; 
 		State state2 = model2.state;
 		List<StateNode> s1 = state1.stateNodeInput.get();
@@ -674,7 +676,20 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 			if (!(sn1 instanceof Tree)) {
 				if (sn1 instanceof Parameter<?>) {
 					if (((Parameter<?>)sn1).getDimension() == ((Parameter<?>)sn2).getDimension()) {
-						sn2.assignFrom(sn1);
+						if (sn1 instanceof IntegerParameter && sn1.getID().startsWith("group")) {
+							sn2.assignFrom(sn1);
+							IntegerParameter p = (IntegerParameter) sn2;
+							int k = 0;
+							for (int j = 0; j < deltaTaxaCount; j++) {
+								p.setValue(k, p.getValue(k) + 1);
+								k += 1;
+								if (k == p.getDimension()) {
+									k = 0;
+								}
+							}
+						} else {
+							sn2.assignFrom(sn1);
+						}
 					} else {
 						model1.parameters.add((Parameter<?>)sn1);
 						model2.parameters.add((Parameter<?>)sn2);
@@ -696,7 +711,7 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 				}
 			}
 		}
-	} // checkStatesAreCompatible
+	} // copyCommonStateNodes
 
 	
 	protected Model getModelFromFile(XMLFile xmlFile) throws SAXException, IOException, ParserConfigurationException, XMLParserException {
