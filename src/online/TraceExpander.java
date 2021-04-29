@@ -65,10 +65,11 @@ public class TraceExpander extends BaseStateExpander {
     
 	final public Input<String> tempDirInput = new Input<>("tempDir","directory where temporary files are written."
 			+ "(Ignored if maxRInput < 1).", "/tmp/");
-    final public Input<ConvergenceCriterion> criterionInput = new Input<>("criterion",
-			"If not set to 'none', the chain keeps afterburning (with chainLength steps) till all items in trace log converge. " +
+    final public Input<String> criterionInput = new Input<>("criterion",
+			"Comma separated list of convergence criteria. "
+			+ "If not set to 'none', the chain keeps afterburning (with chainLength steps) till all items in trace log converge according to all criteria. " +
     		DistributionComparator.convergenceCriterionDescription, 
-    		ConvergenceCriterion.corr, ConvergenceCriterion.values());
+    		ConvergenceCriterion.corr+"");
     final public Input<Integer> maxCycleInput = new Input<>("maxCycle", "maximum number of cycles before stopping. Ignored if negative (which is the default)", -1);
     
     
@@ -82,9 +83,9 @@ public class TraceExpander extends BaseStateExpander {
 	private String multiStateInputFile;
 	private PrintStream multiStateOut;
 	private boolean autoConverge;
-	private ConvergenceCriterion criterion;
 	private int cycle;
 	private int currentSample = 0, sampleCount, availableSamples, currentSampleNr = 0;
+	private ConvergenceCriterion [] criteria;
 
 	@Override
 	public void initAndValidate() {
@@ -93,8 +94,8 @@ public class TraceExpander extends BaseStateExpander {
 	@Override
 	public void run() throws Exception {
 		Long start = System.currentTimeMillis();
-		criterion = criterionInput.get();
-		
+		criteria = getCriteria();
+
 //		Log.setLevel(Log.Level.debug);
 		initialise();
 		
@@ -161,7 +162,10 @@ public class TraceExpander extends BaseStateExpander {
 			}
 			
 			close(cycle, xml2Path);
-			converged = converged(cycle);
+			converged = true;
+			for (ConvergenceCriterion criterion : criteria) {
+				converged = converged && converged(cycle, criterion);
+			}
 			Log.info("Cycle " + cycle + " done in " + (System.currentTimeMillis()-cycleStart)/1000 + " seconds with " + nrOfThreads + " threads "
 					+ "has " + (converged ? "indeed" : "not") + " converged");
 			
@@ -170,7 +174,7 @@ public class TraceExpander extends BaseStateExpander {
 		combine(cycle, xml2Path);		
 	}
 
-	private boolean converged(int cycle) throws IOException {
+	private boolean converged(int cycle, ConvergenceCriterion criterion) throws IOException {
 		if (!autoConverge) {
 			return true;
 		}
@@ -201,6 +205,7 @@ public class TraceExpander extends BaseStateExpander {
 			case SplitR:
 			case KDE:
 			case mean:
+			case interval:
 				return maxStat < thresholdInput.get();
 			case corr:
 				return maxStat < thresholdInput.get() && Math.abs(minStat) < thresholdInput.get();
@@ -245,12 +250,14 @@ public class TraceExpander extends BaseStateExpander {
 	}
 
 	private void initialise() {
+		// set up file mode
 		if (overwriteInput.get()) {
 			Logger.FILE_MODE = LogFileMode.overwrite;
 		} else {
 			Logger.FILE_MODE = LogFileMode.only_new_or_exit;
 		}
 	
+		// set up threads
 		nrOfThreads = Runtime.getRuntime().availableProcessors();
 		if (maxNrOfThreadsInput.get() != null && maxNrOfThreadsInput.get() > 0) {
 			nrOfThreads = Math.min(maxNrOfThreadsInput.get(), nrOfThreads);
@@ -263,7 +270,21 @@ public class TraceExpander extends BaseStateExpander {
 			Randomizer.setSeed(seedInput.get());
 		}
 		
-		autoConverge = !criterionInput.get().equals(ConvergenceCriterion.always);
+		// set up criteria and autoConverge
+		String [] criterion = criterionInput.get().split(",");
+		criteria = new ConvergenceCriterion[criterion.length];
+		int i = 0;
+		autoConverge = true;
+		for (String c : criterion) {
+			criteria[i] = ConvergenceCriterion.valueOf(c);
+			if (criteria[i] == ConvergenceCriterion.always && criterion.length > 1) {
+				throw new IllegalArgumentException("criterion 'always' cannot be combined with other criteria");
+			}
+			if (criteria[i] == ConvergenceCriterion.never && criterion.length > 1) {
+				autoConverge = false;
+				throw new IllegalArgumentException("criterion 'never' cannot be combined with other criteria");
+			}
+		}		
 	}
 
 	private boolean importModels() throws IOException, SAXException, ParserConfigurationException, XMLParserException {

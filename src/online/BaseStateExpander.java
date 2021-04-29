@@ -52,7 +52,7 @@ import online.operators.UniformOnPartition;
 
 // take rates in account in estimated parameters
 // take group sizes in account in estimated parameters
-// automatically determines chain length, perhaps based on Gelman Rubin or other statistic
+// automatically determines chain length, based on Gelman Rubin or other statistic
 
 @Description("Base class for create a new state extending an input state with different set of taxa")
 public class BaseStateExpander extends beast.core.Runnable {
@@ -133,9 +133,26 @@ public class BaseStateExpander extends beast.core.Runnable {
         final Tree otherTree = (Tree) model1.tree;
         Node root = tree2.getRoot();
         root.assignFrom(tree2.getNodesAsArray(), otherTree.getRoot());
+        if (tree2.hasDateTrait()) {
+        	TraitSet trait = tree2.getDateTrait();
+        	// calc average height difference from trait
+        	Node node = otherTree.getNode(0);
+        	double delta = Math.abs(trait.getDate(trait.getValue(node.getID())) - trait.getDate(node.getHeight()));
+        	if (delta > 0) {
+        		shiftNodes(tree2.getRoot(), delta);
+        	}
+        }
+        
         root.setParent(null);
     }
 
+	private void shiftNodes(Node node, double delta) {
+		node.setHeight(node.getHeight() + delta);
+		for (Node child : node.getChildren()) {
+			shiftNodes(child, delta);
+		}
+	}
+	
 	protected void addTaxon(Model model1, Model model2, String taxon, int leafNodeCount) {
 		Tree tree2 = model2.tree;
 

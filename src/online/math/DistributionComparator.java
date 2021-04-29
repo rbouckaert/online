@@ -20,7 +20,7 @@ import beast.util.LogAnalyser;
 public class DistributionComparator extends Runnable {
 
 	
-	public enum ConvergenceCriterion {GR, SplitR, KS, mean, KDE, corr, never, always}
+	public enum ConvergenceCriterion {GR, SplitR, KS, mean, KDE, corr, interval, never, always}
 	final public static String convergenceCriterionDescription = "Criterion for testig convergence:"
 			+ "always for always accepting equality, "
 			+ "never for never accepting equality, "
@@ -29,7 +29,8 @@ public class DistributionComparator extends Runnable {
     		+ "KS for Kolmogorov Smirnov test at p=5% "
     		+ "KDE for difference in distribution by kernel density estimate "
     		+ "mean for checking difference of means with stdev=(2*error1+2*error2) "
-    		+ "corr for correlation between pairs ";
+    		+ "corr for correlation between pairs "
+    		+ "interval for fraction of 95%HPD being shrunk";
 	final public Input<List<LogFile>> traceInput = new Input<>("log", "two or more trace files to compare", new ArrayList<>());
 	final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of trace logs to used as burn-in (and will be ignored)", 10);
     final public Input<ConvergenceCriterion> criterionInput = new Input<>("criterion", convergenceCriterionDescription, ConvergenceCriterion.SplitR, ConvergenceCriterion.values());
@@ -127,7 +128,7 @@ public class DistributionComparator extends Runnable {
 		Double [][] trace1 = log1.getTraces();
 		Double [][] trace2 = log2.getTraces();
 
-		if (criterion == ConvergenceCriterion.mean || criterion == ConvergenceCriterion.corr) {
+		if (criterion == ConvergenceCriterion.mean || criterion == ConvergenceCriterion.corr || criterion == ConvergenceCriterion.interval) {
 			log1.calcStats();
 			log2.calcStats();
 		}
@@ -154,6 +155,8 @@ public class DistributionComparator extends Runnable {
 			case KDE:
 				stat = calcKDEStat(trace1[i+1], trace2[i+1]);
 				break;
+			case interval:
+				stat = calcIntervalFraction(log1, log2, i+1);
 			case corr:
 				stat = calcCorrelation(trace1[i+1],  log1.getStdDev(i+1), 
 						trace2[i+1], log2.getStdDev(i+1));
@@ -176,6 +179,18 @@ public class DistributionComparator extends Runnable {
 			default:
 				return maxStat;
 		}
+	}
+
+	private double calcIntervalFraction(LogAnalyser log1, LogAnalyser log2, int i) {
+		double interval1 = log1.get95HPDup()[i] - log1.get95HPDlow()[i];
+		double interval2 = log2.get95HPDup()[i] - log2.get95HPDlow()[i];
+		if (interval1 > interval2) {
+			return interval1/interval2;
+		}
+		if (interval2 == 0) {
+			return 0;
+		}
+		return interval2/interval1;
 	}
 
 	private double calcCorrelation(Double[] trace1, double stdev1, Double[] trace2, double stdev2) {

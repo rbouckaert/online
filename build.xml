@@ -53,9 +53,6 @@
 	    <available file="${onlinedir}/version.xml" property="versionAvailable"/>
     	<fail unless="versionAvailable">
 	      ** Required file version.xml does not exist. **
-    	  If this is a new project, run "ant skeleton" from
-	      the command line to create the files required for
-    	  your BEAST 2 package.
 	    </fail>
 
     	<!-- Read package name and version from xml file -->
