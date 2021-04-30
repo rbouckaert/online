@@ -61,7 +61,8 @@ public class TraceExpander extends BaseStateExpander {
 	 */
     final public Input<Double> thresholdInput = new Input<>("threshold", "threshold appropriate for convergence criterion, "
     		+ "e.g. maximum acceptable value of Gelman Rubin statistic, or minimum p-value for KS test. "
-			+ "Set 'criterion' to 'none' to stop after first cycle.", 0.4);
+			+ "Set 'criterion' to 'none' to stop after first cycle. "
+			+ "This is a comma separated list matching with one threshold for each convergence criterion", 0.4);
     
 	final public Input<String> tempDirInput = new Input<>("tempDir","directory where temporary files are written."
 			+ "(Ignored if maxRInput < 1).", "/tmp/");
@@ -94,7 +95,6 @@ public class TraceExpander extends BaseStateExpander {
 	@Override
 	public void run() throws Exception {
 		Long start = System.currentTimeMillis();
-		criteria = getCriteria();
 
 //		Log.setLevel(Log.Level.debug);
 		initialise();

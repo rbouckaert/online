@@ -28,6 +28,7 @@ import beast.core.OperatorSchedule;
 import beast.core.Runnable;
 import beast.core.State;
 import beast.core.StateNode;
+import beast.core.StateNodeInitialiser;
 import beast.core.parameter.BooleanParameter;
 import beast.core.parameter.IntegerParameter;
 import beast.core.parameter.Parameter;
@@ -306,6 +307,9 @@ public class BaseStateExpander extends beast.core.Runnable {
 		// adding a single taxon
 		State state = model2.state;
 		Distribution posterior = model2.posterior;
+		if (hasGroupSizes) {
+			posterior = ((CompoundDistribution) posterior).pDistributions.get().get(1);
+		}
 		
 		// calc logP when new taxon is outgroup
         state.setEverythingDirty(true);
@@ -675,12 +679,39 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 	} // determineInclusionsExclusions
 
 
+	boolean hasGroupSizes = false;
 	// copy all state-nodes unless they are a tree, or they are parameters with different dimensions (like rates)
 	protected void copyCommonStateNodes(Model model1, Model model2, int deltaTaxaCount) {
 		State state1 = model1.state; 
 		State state2 = model2.state;
 		List<StateNode> s1 = state1.stateNodeInput.get();
 		List<StateNode> s2 = state2.stateNodeInput.get();
+
+		for (int i = 0; i < s1.size(); i++) {
+			StateNode sn1 = s1.get(i);
+			StateNode sn2 = s2.get(i);
+			if (!(sn1 instanceof Tree)) {
+				if (sn1 instanceof Parameter<?>) {
+					if (((Parameter<?>)sn1).getDimension() == ((Parameter<?>)sn2).getDimension()) {
+						if (sn1 instanceof IntegerParameter && sn1.getID().startsWith("bGroupSizes")) {
+							hasGroupSizes = true;
+						}
+					}
+				}
+			}
+		}		
+		if (hasGroupSizes) {
+			for (StateNodeInitialiser init : model2.mcmc.initialisersInput.get()) {
+				init.initStateNodes();
+			}
+			// initialises internal node count in tree
+			model2.state.setEverythingDirty(true);
+			model2.state.storeCalculationNodes();
+			model2.state.checkCalculationNodesDirtiness();
+			model2.posterior.calculateLogP();
+			model2.state.acceptCalculationNodes();
+		}
+		
 		for (int i = 0; i < s1.size(); i++) {
 			StateNode sn1 = s1.get(i);
 			StateNode sn2 = s2.get(i);
@@ -688,12 +719,12 @@ Log.debug("[" + logP + "] " + tree.getRoot().toNewick());
 			if (!sn1.getID().equals(sn2.getID()) || sn1.getClass() != sn2.getClass()) {
 				throw new IllegalArgumentException("Different states found");
 			}
-
+			
 			// copy under some conditions
 			if (!(sn1 instanceof Tree)) {
 				if (sn1 instanceof Parameter<?>) {
 					if (((Parameter<?>)sn1).getDimension() == ((Parameter<?>)sn2).getDimension()) {
-						if (sn1 instanceof IntegerParameter && sn1.getID().startsWith("group")) {
+						if (sn1 instanceof IntegerParameter && sn1.getID().startsWith("bGroupSizes")) {
 							sn2.assignFrom(sn1);
 							IntegerParameter p = (IntegerParameter) sn2;
 							int k = 0;
