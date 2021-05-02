@@ -94,26 +94,26 @@ public class PartitionMCMC extends MCMC {
                 if (sampleNr > NR_OF_DEBUG_SAMPLES * 3) {
                     // switch off debug mode once a sufficient large sample is checked
                     debugFlag = false;
-	                if (Math.abs(logLikelihood - originalLogP) > 1e-6) {
-                        // incorrect calculation outside debug period.
-                        // This happens infrequently enough that it should repair itself after a robust posterior calculation
-                        corrections++;
-                        if (corrections > 100) {
-                            // after 100 repairs, there must be something seriously wrong with the implementation
-                        	Log.err.println("Too many corrections. There is something seriously wrong that cannot be corrected");
-                            state.storeToFile(sampleNr);
-                            operatorSchedule.storeToFile();
-                            System.exit(1);
-                        }
-                        oldLogLikelihood = state.robustlyCalcPosterior(posterior);
-                    }
-                } else {
-	                if (Math.abs(logLikelihood - originalLogP) > 1e-6) {
-                        // halt due to incorrect posterior during initial debug period
-                        state.storeToFile(sampleNr);
-                        operatorSchedule.storeToFile();
-                        System.exit(1);
-                    }
+//	                if (Math.abs(logLikelihood - originalLogP) > 1e-6) {
+//                        // incorrect calculation outside debug period.
+//                        // This happens infrequently enough that it should repair itself after a robust posterior calculation
+//                        corrections++;
+//                        if (corrections > 100) {
+//                            // after 100 repairs, there must be something seriously wrong with the implementation
+//                        	Log.err.println("Too many corrections. There is something seriously wrong that cannot be corrected");
+//                            state.storeToFile(sampleNr);
+//                            operatorSchedule.storeToFile();
+//                            System.exit(1);
+//                        }
+//                        oldLogLikelihood = state.robustlyCalcPosterior(posterior);
+//                    }
+//                } else {
+//	                if (Math.abs(logLikelihood - originalLogP) > 1e-6) {
+//                        // halt due to incorrect posterior during initial debug period
+//                        state.storeToFile(sampleNr);
+//                        operatorSchedule.storeToFile();
+//                        System.exit(1);
+//                    }
                 }
             } else {
                 if (sampleNr >= 0) {

@@ -94,6 +94,9 @@ public class TraceExpander extends BaseStateExpander {
 	
 	@Override
 	public void run() throws Exception {
+		inputCheck();
+		
+		
 		Long start = System.currentTimeMillis();
 
 //		Log.setLevel(Log.Level.debug);
@@ -140,6 +143,27 @@ public class TraceExpander extends BaseStateExpander {
 	}
 
 	
+	private void inputCheck() {
+		if (!xml1Input.get().exists()) {
+			throw new IllegalArgumentException("File " + xml1Input.get().getName() + " does not exist.");
+		}
+		if (xml2Input.get() != null && !xml2Input.get().getName().equals("[[none]]") &&
+				!xml2Input.get().exists()) {
+			throw new IllegalArgumentException("File " + xml2Input.get().getName() + " does not exist.");
+		}
+		if (stateFileInput.get() != null && !stateFileInput.get().getName().equals("[[none]]") &&
+				!stateFileInput.get().exists()) {
+			throw new IllegalArgumentException("File " + stateFileInput.get().getName() + " does not exist.");
+		}
+		if (multiStateFileInput.get() != null && !multiStateFileInput.get().getName().equals("[[none]]") &&
+				!multiStateFileInput.get().exists()) {
+			throw new IllegalArgumentException("File " + multiStateFileInput.get().getName() + " does not exist.");
+		}
+		if (!new File(tempDirInput.get()).exists()) {
+			throw new IllegalArgumentException("Directory " + tempDirInput.get() + " does not exist.");
+		}
+	}
+
 	private void autoConverge(boolean isResuming, int burnIn, String xml2Path) throws IOException, XMLParserException, SAXException, ParserConfigurationException, InterruptedException {
 		boolean converged;
 		do {
@@ -424,6 +448,7 @@ public class TraceExpander extends BaseStateExpander {
         				expander.afterBurner(model2, new ArrayList<>(), 0.0);
         			}
         			logState(model2.state);
+        			model2.operatorSchedule.storeToFile();
             	}
             } catch (Exception e) {
                 Log.err.println("Something went wrong in a calculation of " + from + " " + to + ": " + e.getMessage());
@@ -520,6 +545,7 @@ public class TraceExpander extends BaseStateExpander {
 //			Distribution p = model2.mcmc.posteriorInput.get();
 //			double logP2 = model2.state.robustlyCalcPosterior(p);
 			logState(model2.state);
+			model2.operatorSchedule.storeToFile();
 
 //			double logP = p.getCurrentLogP();
 //			System.err.println(logP + " - " + logP2 + " = " + (logP - logP2));
