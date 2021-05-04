@@ -57,10 +57,17 @@ public class Log2MultiState extends Runnable {
 		StringBuilder multiStates = new StringBuilder();
 		for (int i = 0; i < trace.getTrace(0).length; i++) {
 			Tree tree = treeSet.next();
+			if (tree == null) {
+				Log.warning("\nWARNING: Log file (" + trace.getTrace(0).length + ") and tree files (" + i + ") not the same length");
+				Log.warning("WARNING: so there is a possible mismatch between trace and tree file entries.");
+				Log.warning("WARNING: Use logcombiner with the `-resample` option to synchronise trace and tree logs.\n");
+				break;
+			}
 			addState(state, multiStates, trace, i, tree);
 		}
 		
 		output(multiStates);
+		Log.warning("Done");
 	}
 
 	
@@ -68,7 +75,7 @@ public class Log2MultiState extends Runnable {
 		buf.append("<itsabeastystatewerein version='2.0' sample='0'>\n");
 		for (StateNode node : state.stateNodeInput.get()) {
 			if (node instanceof Tree) {
-				((Tree) node).assignFrom(tree);
+				((Tree) node).assignFromWithoutID(tree);
 			} else if (node instanceof RealParameter) {
 				getRealParameterValues((RealParameter) node, trace, i);
 			} else if (node instanceof IntegerParameter) {
@@ -80,7 +87,6 @@ public class Log2MultiState extends Runnable {
 			}
 			
 			buf.append(node.toXML());
-			buf.append("\n");
 		}
 		buf.append("</itsabeastystatewerein>\n");
 	}
@@ -99,13 +105,9 @@ public class Log2MultiState extends Runnable {
 			param.setValue(value);
 			return;
 		} else {
-			int k = indexOf(id+"1", labels);
-			if (k < 0 && id.lastIndexOf(".") > 0) {
-				id = id.substring(id.lastIndexOf("."));
-				k = indexOf(id+"1", labels);
-				if (k < 0) {
-					throw new IllegalArgumentException("cannot find " + id + " in trace file");
-				}
+			int k = indexOf(id, labels);		
+			if (k < 0) {
+				throw new IllegalArgumentException("cannot find " + id + " in trace file");
 			}
 			for (int j = 0; j < param.getDimension(); j++) {
 				double value = trace.getTrace(k+j)[i];
@@ -117,14 +119,30 @@ public class Log2MultiState extends Runnable {
 	private int indexOf(String id, List<String> labels) {
 		for (int i = 0; i < labels.size(); i++) {
 			if (labels.get(i).equals(id)) {
-				return i;
+				return i + 1;
+			}
+		}
+		for (int i = 0; i < labels.size(); i++) {
+			String label = labels.get(i);
+			if (label.startsWith(id) && isAllDigits(label.substring(id.length())))  {
+				return i + 1;
 			}
 		}
 		if (id.lastIndexOf(".") > 0) {
-			id = id.substring(id.lastIndexOf("."));
-			return indexOf(id, labels);
+			String idWithoutPartitionInfo = id.substring(0, id.lastIndexOf("."));
+			return indexOf(idWithoutPartitionInfo, labels);
 		}
 		return -1;
+	}
+
+	private boolean isAllDigits(String substring) {
+		for (int i = 0; i < substring.length(); i++) {
+			char c = substring.charAt(i);
+			if (!Character.isDigit(c) && c != '.') {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private void getIntegerParameterValues(IntegerParameter param, LogAnalyser trace, int i) {
@@ -139,13 +157,9 @@ public class Log2MultiState extends Runnable {
 			param.setValue(value);
 			return;
 		} else {
-			int k = indexOf(id+"1", labels);
-			if (k < 0 && id.lastIndexOf(".") > 0) {
-				id = id.substring(id.lastIndexOf("."));
-				k = indexOf(id+"1", labels);
-				if (k < 0) {
-					throw new IllegalArgumentException("cannot find " + id + " in trace file");
-				}
+			int k = indexOf(id, labels);
+			if (k < 0) {
+				throw new IllegalArgumentException("cannot find " + id + " in trace file");
 			}
 			for (int j = 0; j < param.getDimension(); j++) {
 				int value = (int) Math.round(trace.getTrace(k+j)[i]);
@@ -166,13 +180,9 @@ public class Log2MultiState extends Runnable {
 			param.setValue(value);
 			return;
 		} else {
-			int k = indexOf(id+"1", labels);
-			if (k < 0 && id.lastIndexOf(".") > 0) {
-				id = id.substring(id.lastIndexOf("."));
-				k = indexOf(id+"1", labels);
-				if (k < 0) {
-					throw new IllegalArgumentException("cannot find " + id + " in trace file");
-				}
+			int k = indexOf(id, labels);
+			if (k < 0) {
+				throw new IllegalArgumentException("cannot find " + id + " in trace file");
 			}
 			for (int j = 0; j < param.getDimension(); j++) {
 				boolean value = trace.getTrace(k+j)[i] != 0;
@@ -186,6 +196,7 @@ public class Log2MultiState extends Runnable {
 		if (multiStateInputFile == null || multiStateInputFile.equals("[[none]]")) {
 			multiStateInputFile = xmlInput.get().getPath() + ".state.multi"; 
 		}
+		Log.warning("writing to file " + multiStateInputFile);
         FileWriter outfile = new FileWriter(new File(multiStateInputFile));
         outfile.write(multiStates.toString());
         outfile.close();
@@ -202,13 +213,9 @@ public class Log2MultiState extends Runnable {
 		if (treeInput.get() != null && !treeInput.get().exists()) {
 			throw new IllegalArgumentException("Could not find tree log file " + treeInput.get().getName());
 		}
-		if (multiStateFileInput.get() != null && !(multiStateFileInput.get().getName().equals("[[none]]")) &&
-				!multiStateFileInput.get().exists()) {
-			throw new IllegalArgumentException("Could not find tree log file " + treeInput.get().getName());
-		}
 	}
 
 	public static void main(String[] args) throws Exception {
-		new Application(new MultiState2Log(), "Log to Multi State", args);
+		new Application(new Log2MultiState(), "Log to Multi State", args);
 	}
 }
