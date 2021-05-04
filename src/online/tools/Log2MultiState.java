@@ -3,6 +3,7 @@ package online.tools;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.List;
 
 import beast.app.treeannotator.TreeAnnotator;
 import beast.app.treeannotator.TreeAnnotator.MemoryFriendlyTreeSet;
@@ -16,6 +17,11 @@ import beast.core.Input;
 import beast.core.MCMC;
 import beast.core.Runnable;
 import beast.core.State;
+import beast.core.StateNode;
+import beast.core.parameter.BooleanParameter;
+import beast.core.parameter.IntegerParameter;
+import beast.core.parameter.RealParameter;
+import beast.core.util.Log;
 import beast.evolution.tree.Tree;
 import beast.util.LogAnalyser;
 import beast.util.XMLParser;
@@ -58,12 +64,123 @@ public class Log2MultiState extends Runnable {
 	}
 
 	
-	private void addState(State state, StringBuilder multiStates, LogAnalyser trace, int i, Tree tree) {
-		// TODO: do the hard work here
+	private void addState(State state, StringBuilder buf, LogAnalyser trace, int i, Tree tree) {
+		buf.append("<itsabeastystatewerein version='2.0' sample='0'>\n");
+		for (StateNode node : state.stateNodeInput.get()) {
+			if (node instanceof Tree) {
+				((Tree) node).assignFrom(tree);
+			} else if (node instanceof RealParameter) {
+				getRealParameterValues((RealParameter) node, trace, i);
+			} else if (node instanceof IntegerParameter) {
+				getIntegerParameterValues((IntegerParameter) node, trace, i);
+			} else if (node instanceof BooleanParameter) {
+				getBooleanParameterValues((BooleanParameter) node, trace, i);
+			} else {
+				Log.warning("Don't know how to retrieve state nodes of type " + node.getClass().getName());
+			}
+			
+			buf.append(node.toXML());
+			buf.append("\n");
+		}
+		buf.append("</itsabeastystatewerein>\n");
 	}
 
 	
 	
+	private void getRealParameterValues(RealParameter param, LogAnalyser trace, int i) {
+		String id = param.getID();
+		List<String> labels = trace.getLabels();
+		if (param.getDimension() == 1) {
+			int k = indexOf(id, labels);
+			if (k < 0) {
+				throw new IllegalArgumentException("cannot find " + id + " in trace file");
+			}
+			double value = trace.getTrace(k)[i];
+			param.setValue(value);
+			return;
+		} else {
+			int k = indexOf(id+"1", labels);
+			if (k < 0 && id.lastIndexOf(".") > 0) {
+				id = id.substring(id.lastIndexOf("."));
+				k = indexOf(id+"1", labels);
+				if (k < 0) {
+					throw new IllegalArgumentException("cannot find " + id + " in trace file");
+				}
+			}
+			for (int j = 0; j < param.getDimension(); j++) {
+				double value = trace.getTrace(k+j)[i];
+				param.setValue(j, value);
+			}
+		}
+	}
+
+	private int indexOf(String id, List<String> labels) {
+		for (int i = 0; i < labels.size(); i++) {
+			if (labels.get(i).equals(id)) {
+				return i;
+			}
+		}
+		if (id.lastIndexOf(".") > 0) {
+			id = id.substring(id.lastIndexOf("."));
+			return indexOf(id, labels);
+		}
+		return -1;
+	}
+
+	private void getIntegerParameterValues(IntegerParameter param, LogAnalyser trace, int i) {
+		String id = param.getID();
+		List<String> labels = trace.getLabels();
+		if (param.getDimension() == 1) {
+			int k = indexOf(id, labels);
+			if (k < 0) {
+				throw new IllegalArgumentException("cannot find " + id + " in trace file");
+			}
+			int value = (int) Math.round(trace.getTrace(k)[i]);
+			param.setValue(value);
+			return;
+		} else {
+			int k = indexOf(id+"1", labels);
+			if (k < 0 && id.lastIndexOf(".") > 0) {
+				id = id.substring(id.lastIndexOf("."));
+				k = indexOf(id+"1", labels);
+				if (k < 0) {
+					throw new IllegalArgumentException("cannot find " + id + " in trace file");
+				}
+			}
+			for (int j = 0; j < param.getDimension(); j++) {
+				int value = (int) Math.round(trace.getTrace(k+j)[i]);
+				param.setValue(j, value);
+			}
+		}
+	}
+
+	private void getBooleanParameterValues(BooleanParameter param, LogAnalyser trace, int i) {
+		String id = param.getID();
+		List<String> labels = trace.getLabels();
+		if (param.getDimension() == 1) {
+			int k = indexOf(id, labels);
+			if (k < 0) {
+				throw new IllegalArgumentException("cannot find " + id + " in trace file");
+			}
+			boolean value = trace.getTrace(k)[i] != 0;
+			param.setValue(value);
+			return;
+		} else {
+			int k = indexOf(id+"1", labels);
+			if (k < 0 && id.lastIndexOf(".") > 0) {
+				id = id.substring(id.lastIndexOf("."));
+				k = indexOf(id+"1", labels);
+				if (k < 0) {
+					throw new IllegalArgumentException("cannot find " + id + " in trace file");
+				}
+			}
+			for (int j = 0; j < param.getDimension(); j++) {
+				boolean value = trace.getTrace(k+j)[i] != 0;
+				param.setValue(j, value);
+			}
+		}
+	}
+
 	private void output(StringBuilder multiStates) throws IOException {
 		String multiStateInputFile = multiStateFileInput.get().getPath();
 		if (multiStateInputFile == null || multiStateInputFile.equals("[[none]]")) {
