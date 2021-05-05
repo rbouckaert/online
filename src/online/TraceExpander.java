@@ -120,10 +120,10 @@ public class TraceExpander extends BaseStateExpander {
 		
 		sampleNr = 0;
 		if (nrOfThreads == 1) {
-			processUnThreaded(false);
+			processUnThreaded(xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]"));
 		} else {
 			// split work over k threads, with work for (n - burnIn)/k states each
-			processThreaded(false);
+			processThreaded(xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]"));
 		}
 		
 		String xml2Path = xml2Input.get().getAbsolutePath();
@@ -429,6 +429,8 @@ public class TraceExpander extends BaseStateExpander {
 	    	        model1.operatorSchedule.restoreFromFile();	
 	    	        model2.operatorSchedule.setStateFileName(stateFile);
 	    	        model2.operatorSchedule.restoreFromFile();	
+	    			stateFile = xml2Input.get().getPath() + ".state";
+	    	        model2.operatorSchedule.setStateFileName(stateFile);
 	    		}
     		} catch (IOException | SAXException | ParserConfigurationException | XMLParserException e) {
     			
@@ -447,8 +449,7 @@ public class TraceExpander extends BaseStateExpander {
         				model2.state.fromXML(xml);
         				expander.afterBurner(model2, new ArrayList<>(), 0.0);
         			}
-        			logState(model2.state);
-        			model2.operatorSchedule.storeToFile();
+        			logState(model2);
             	}
             } catch (Exception e) {
                 Log.err.println("Something went wrong in a calculation of " + from + " " + to + ": " + e.getMessage());
@@ -527,6 +528,8 @@ public class TraceExpander extends BaseStateExpander {
 		        model1.operatorSchedule.restoreFromFile();	
 		        model2.operatorSchedule.setStateFileName(stateFile);
 		        model2.operatorSchedule.restoreFromFile();	
+    			stateFile = xml2Input.get().getPath() + ".state";
+    	        model2.operatorSchedule.setStateFileName(stateFile);
 			}
 		}
 
@@ -544,8 +547,7 @@ public class TraceExpander extends BaseStateExpander {
 
 //			Distribution p = model2.mcmc.posteriorInput.get();
 //			double logP2 = model2.state.robustlyCalcPosterior(p);
-			logState(model2.state);
-			model2.operatorSchedule.storeToFile();
+			logState(model2);
 
 //			double logP = p.getCurrentLogP();
 //			System.err.println(logP + " - " + logP2 + " = " + (logP - logP2));
@@ -608,7 +610,16 @@ public class TraceExpander extends BaseStateExpander {
 		return n;
 	}
 
-	synchronized private void logState(State other) throws IOException {
+	synchronized private void logState(Model model) throws IOException {
+		
+		
+		State other = model.state;
+		PrintStream sf = new PrintStream(new File(xml2Input.get().getPath()+".state"));
+		sf.println("<itsabeastystatewerein>");
+		sf.println("</itsabeastystatewerein>");
+		sf.close();
+		model.operatorSchedule.storeToFile();
+
 		State state = model2.state;
 		if (state != other) {
 			for (int i = 0; i < state.getNrOfStateNodes(); i++) {

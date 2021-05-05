@@ -40,6 +40,7 @@ import beast.evolution.likelihood.GenericTreeLikelihood;
 import beast.evolution.tree.Node;
 import beast.evolution.tree.TraitSet;
 import beast.evolution.tree.Tree;
+import beast.util.TreeParser;
 import beast.util.XMLParser;
 import beast.util.XMLParserException;
 import beast.util.XMLProducer;
@@ -135,15 +136,15 @@ public class BaseStateExpander extends beast.core.Runnable {
         Node root = tree2.getRoot();
         root.assignFrom(tree2.getNodesAsArray(), otherTree.getRoot());
         if (tree2.hasDateTrait()) {
+        	// TODO: robustify, taking all leaf dates in account?
         	TraitSet trait = tree2.getDateTrait();
-        	// calc average height difference from trait
+//        	// calc average height difference from trait
         	Node node = otherTree.getNode(0);
         	double delta = Math.abs(trait.getDate(trait.getValue(node.getID())) - trait.getDate(node.getHeight()));
         	if (delta > 0) {
         		shiftNodes(tree2.getRoot(), delta);
         	}
         }
-        
         root.setParent(null);
     }
 
@@ -306,6 +307,7 @@ public class BaseStateExpander extends beast.core.Runnable {
 	protected void positionAdditions(Model model2, String taxon) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		// adding a single taxon
 		State state = model2.state;
+		makeValid(model2.tree.getRoot());
 		Distribution posterior = model2.posterior;
 		if (hasGroupSizes) {
 			posterior = ((CompoundDistribution) posterior).pDistributions.get().get(1);
@@ -329,6 +331,18 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 				root.getLeft() == newTaxon ? root.getRight() : root.getLeft(),
 				state, posterior, model2.tree, logP);
 	} // addAdditions
+
+	// TODO: REMVOE THIS HACK
+	private void makeValid(Node node) {
+		for (Node child : node.getChildren()) {
+			makeValid(child);
+		}
+		if (!node.isRoot()) {
+			if (node.getHeight() > node.getParent().getHeight()) {
+				node.getParent().setHeight(node.getHeight() + 1e-10);
+			}
+		}
+	}
 
 	/** run short MCMC chain on subset of nodes aroun newTaxon 
 	 * @throws ParserConfigurationException 
@@ -413,8 +427,8 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 		} else {
 			// set proportion partitioned operators to zero
 			proportionPartitionedInput.setValue(0.0, this);
+			operators.addAll(model.mcmc.operatorsInput.get());
 		}
-		//operators.addAll(model.mcmc.operatorsInput.get());
 
 		
 		Logger screenlog = new Logger();
@@ -529,29 +543,29 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	}
 
 	protected void tryLeftRight(Node newTaxon, Node child, State state, Distribution posterior, Tree tree, double logP) {
-		double originalHeigt = internalNode.getHeight();
-
-		Node left = child.getLeft();
-		Node right = child.getRight();
-		double logPleft = tryBranch(newTaxon, left, state, posterior, tree);
-		double logPright = tryBranch(newTaxon, right, state, posterior, tree);
-		if (logPleft < logP && logPright < logP) {
-			// restore internalNode above child
-			child = internalNode.getParent();
-			positionOnBranch(newTaxon, child, tree);
-			newTaxon.getParent().setHeight(originalHeigt);
-			return;
-		}
-		if (logPleft < logPright) {
-			if (!right.isLeaf() && right.getHeight() > newTaxon.getHeight()) {
-				tryLeftRight(newTaxon, right, state, posterior, tree, logPright);
+			double originalHeigt = internalNode.getHeight();
+	
+			Node left = child.getLeft();
+			Node right = child.getRight();
+			double logPleft = tryBranch(newTaxon, left, state, posterior, tree);
+			double logPright = tryBranch(newTaxon, right, state, posterior, tree);
+			if (logPleft < logP && logPright < logP) {
+				// restore internalNode above child
+				child = internalNode.getParent();
+				positionOnBranch(newTaxon, child, tree);
+				newTaxon.getParent().setHeight(originalHeigt);
+				return;
 			}
-			return;
-		}
-		positionOnBranch(newTaxon, left, tree);
-		if (!left.isLeaf() && left.getHeight() > newTaxon.getHeight()) {
-			tryLeftRight(newTaxon, left, state, posterior, tree, logPleft);
-		}
+			if (logPleft < logPright) {
+				if (!right.isLeaf() && right.getHeight() > newTaxon.getHeight()) {
+					tryLeftRight(newTaxon, right, state, posterior, tree, logPright);
+				}
+				return;
+			}
+			positionOnBranch(newTaxon, left, tree);
+			if (!left.isLeaf() && left.getHeight() > newTaxon.getHeight()) {
+				tryLeftRight(newTaxon, left, state, posterior, tree, logPleft);
+			}
 	}
 
 	protected double tryBranch(Node newTaxon, Node node, State state, Distribution posterior, Tree tree) {
