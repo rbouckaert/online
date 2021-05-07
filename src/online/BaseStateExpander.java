@@ -106,8 +106,9 @@ public class BaseStateExpander extends beast.core.Runnable {
 		
 		// position additional taxa at locations with high support
 		for (String taxon : additions) {
-			addTaxon(model1, model2, taxon, leafNodeCount);
-			positionAdditions(model2, taxon);
+			if (addTaxon(model1, model2, taxon, leafNodeCount)) {
+				positionAdditions(model2, taxon);
+			}
 		}
 		
 		afterBurner(model2, additions, proportionPartitionedInput.get());
@@ -155,7 +156,9 @@ public class BaseStateExpander extends beast.core.Runnable {
 		}
 	}
 	
-	protected void addTaxon(Model model1, Model model2, String taxon, int leafNodeCount) {
+	/** returns false if new taxon is older than root, so should not be propagated down the tree **/
+	protected boolean addTaxon(Model model1, Model model2, String taxon, int leafNodeCount) {
+		boolean newTaxonIsYoungerThanRoot = true;
 		Tree tree2 = model2.tree;
 
 
@@ -177,7 +180,13 @@ public class BaseStateExpander extends beast.core.Runnable {
 		Node newRoot = new Node();
 		newRoot.addChild(model2.tree.getRoot());
 		newRoot.addChild(child);
-		newRoot.setHeight(model2.tree.getRoot().getHeight() * (model2.tree.getNodeCount()+1.0)/model2.tree.getNodeCount());
+		double h = model2.tree.getRoot().getHeight() * (model2.tree.getNodeCount()+1.0)/model2.tree.getNodeCount();
+		if (h < child.getHeight()) {
+			// child is a new taxon older than the root
+			h = child.getHeight() + 0.1;
+			newTaxonIsYoungerThanRoot = false;
+		}
+		newRoot.setHeight(h);
 		setRoot(model2.tree, newRoot);
 
 		for (int i = 0; i < model1.parameters.size(); i++) {
@@ -193,7 +202,8 @@ public class BaseStateExpander extends beast.core.Runnable {
 		setupMetaData(newRoot.getLeft().getNr(), model2.parameters);
 		setupMetaData(newRoot.getRight().getNr(), model2.parameters);
 
-	} // initialiseTree
+		return newTaxonIsYoungerThanRoot;
+	} // addTaxon
 
 	private void setupMetaData(int i, List<Parameter<?>> metaData) {
 		for (int k = 0; k < metaData.size(); k++) {
@@ -307,7 +317,7 @@ public class BaseStateExpander extends beast.core.Runnable {
 	protected void positionAdditions(Model model2, String taxon) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		// adding a single taxon
 		State state = model2.state;
-		makeValid(model2.tree.getRoot());
+//		makeValid(model2.tree.getRoot());
 		Distribution posterior = model2.posterior;
 		if (hasGroupSizes) {
 			posterior = ((CompoundDistribution) posterior).pDistributions.get().get(1);
@@ -333,16 +343,16 @@ Log.debug("[" + logP + "] " + model2.tree.getRoot().toNewick());
 	} // addAdditions
 
 	// TODO: REMVOE THIS HACK
-	private void makeValid(Node node) {
-		for (Node child : node.getChildren()) {
-			makeValid(child);
-		}
-		if (!node.isRoot()) {
-			if (node.getHeight() > node.getParent().getHeight()) {
-				node.getParent().setHeight(node.getHeight() + 1e-10);
-			}
-		}
-	}
+//	private void makeValid(Node node) {
+//		for (Node child : node.getChildren()) {
+//			makeValid(child);
+//		}
+//		if (!node.isRoot()) {
+//			if (node.getHeight() > node.getParent().getHeight()) {
+//				node.getParent().setHeight(node.getHeight() + 1e-10);
+//			}
+//		}
+//	}
 
 	/** run short MCMC chain on subset of nodes aroun newTaxon 
 	 * @throws ParserConfigurationException 
