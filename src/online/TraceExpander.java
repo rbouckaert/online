@@ -442,13 +442,24 @@ public class TraceExpander extends BaseStateExpander {
             try {
             	for (int i = from; i < to; i++) {
         			String xml = nextState();
+        			
         			if (!afterBurnOnly) {
         				model1.state.fromXML(xml);
-        				expander.updateState(model1, model2);
+        				List<String> additions = step1UpdateState(model1, model2);
+        				step2OptimiseState(model2, additions);
+        				step3RunMCMC(model2);
         			} else {
         				model2.state.fromXML(xml);
-        				expander.afterBurner(model2, new ArrayList<>(), 0.0);
         			}
+        			step3RunMCMC(model2);
+//
+//        			if (!afterBurnOnly) {
+//        				model1.state.fromXML(xml);
+//        				expander.updateState(model1, model2);
+//        			} else {
+//        				model2.state.fromXML(xml);
+//        				expander.afterBurner(model2, new ArrayList<>(), 0.0);
+//        			}
         			logState(model2);
             	}
             } catch (Exception e) {
@@ -539,11 +550,13 @@ public class TraceExpander extends BaseStateExpander {
 			
 			if (!afterBurnOnly) {
 				model1.state.fromXML(xml);
-				updateState(model1, model2);
+				List<String> additions = step1UpdateState(model1, model2);
+				step2OptimiseState(model2, additions);
+				step3RunMCMC(model2);
 			} else {
 				model2.state.fromXML(xml);
-				afterBurner(model2, new ArrayList<>(), 0);
 			}
+			step3RunMCMC(model2);
 
 //			Distribution p = model2.mcmc.posteriorInput.get();
 //			double logP2 = model2.state.robustlyCalcPosterior(p);

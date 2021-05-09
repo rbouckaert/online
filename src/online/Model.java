@@ -11,13 +11,13 @@ import beast.core.parameter.Parameter;
 import beast.evolution.tree.Tree;
 
 /** container of bits relevant to updating the state of models **/
-class Model {
-	State state;
-	Tree tree;
-	List<Parameter<?>> parameters;
-	Distribution posterior;
-	OperatorSchedule operatorSchedule;
-	MCMC mcmc;
+public class Model {
+	public State state;
+	public Tree tree;
+	public List<Parameter<?>> parameters;
+	public Distribution posterior;
+	public OperatorSchedule operatorSchedule;
+	public MCMC mcmc;
 	
 	Model() {
 		parameters = new ArrayList<>();

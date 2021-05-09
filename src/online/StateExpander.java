@@ -2,6 +2,7 @@ package online;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 
 import beast.app.util.Application;
 import beast.app.util.XMLFile;
@@ -48,7 +49,8 @@ public class StateExpander extends BaseStateExpander {
         model2.operatorSchedule.setStateFileName(stateFile);
         model2.operatorSchedule.restoreFromFile();
 		
-		updateState(model1, model2);
+		List<String> additions = step1UpdateState(model1, model2);
+		step2OptimiseState(model2, additions);
 		
 		exportStateFile(model2.state, model1.operatorSchedule);
 		Log.debug("Done!");

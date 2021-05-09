@@ -7,9 +7,7 @@ import java.io.PrintStream;
 
 import beast.core.Description;
 import beast.core.Input;
-import beast.core.Logger;
 import beast.core.State;
-import beast.core.Logger.LOGMODE;
 
 @Description("State that stores a history of states in a multi-state file")
 public class StorableState extends State {
