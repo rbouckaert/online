@@ -3,14 +3,29 @@ package online;
 
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.xml.sax.SAXException;
 
 import beast.core.*;
+import beast.core.parameter.IntegerParameter;
+import beast.core.parameter.Parameter;
+import beast.core.parameter.RealParameter;
 import beast.core.util.Log;
+import beast.util.XMLParser;
+import beast.util.XMLParserException;
+import beast.util.XMLProducer;
+import beastbooster.operators.MultiStepOperatorScheduleForSingleTree;
 import online.operators.AfterburnOperatorSchedule;
+import online.operators.ExchangeOnPartition;
+import online.operators.RandomWalkOnParition;
+import online.operators.RateScaleOnPartition;
+import online.operators.TreePartition;
+import online.operators.UniformOnPartition;
 
 @Description("Perform MCMC on a partition of the tree -- this assumes that "
 		+ "no screen loggin or file logging is required")
@@ -133,5 +148,84 @@ public class PartitionMCMC extends MCMC {
 		this.chainLengthProportion = chainLengthProportion;		
 	}
     
+
+
+	static public PartitionMCMC newMCMC(Model model, TreePartition partition, Long chainLength, String definitions) {
+		List<Operator> operators = new ArrayList<>();
+		if (partition != null) {
+			// add partition operators
+			ExchangeOnPartition op1 = new ExchangeOnPartition(model.tree, partition, 1.0);
+			op1.setID("ExchangeOnPartition");
+			UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
+			op2.setID("UniformOnPartition");
+			operators.add(op1);
+			operators.add(op2);
+			
+			// add RateScale or RandomWalk operator if required for clock parameters
+			for (Parameter<?> p : model.parameters) {
+				if (Util.isClockModelParameter(p)) {
+					if (p instanceof RealParameter) {
+						// for parameters representing rate per branch
+						RateScaleOnPartition op3 = new RateScaleOnPartition(partition, (RealParameter) p, 1.0);
+						op3.setID("RateScaleOnPartition");
+						operators.add(op3);
+					} else {
+						// for parameters representing category (relaxed clock) or indicator (random clock) per branch
+						RandomWalkOnParition op3 = new RandomWalkOnParition(partition, (IntegerParameter) p, 1.0);
+						op3.setID("RandomWalkOnParition");
+						operators.add(op3);
+					}
+				}
+			}
+		} else {
+			operators.addAll(model.mcmc.operatorsInput.get());
+		}
+
+		
+		Logger screenlog = new Logger();
+		screenlog.initByName("log", model.mcmc.posteriorInput.get(), "logEvery", (int)(long) chainLength);
+		
+		MultiStepOperatorScheduleForSingleTree subschedule = new MultiStepOperatorScheduleForSingleTree();
+
+		AfterburnOperatorSchedule operatorSchedule = new AfterburnOperatorSchedule();
+		operatorSchedule.initByName("subschedule",subschedule);
+
+		MCMC mcmc = new MCMC(); 		
+		mcmc.initByName(
+				"distribution", model.mcmc.posteriorInput.get(),
+				"state", model.mcmc.startStateInput.get(),
+				"chainLength", chainLength,
+				"operator", operators,
+				"logger", screenlog,
+				"operatorschedule", operatorSchedule
+		);
+		subschedule.initByName("operator", model.mcmc.operatorsInput.get());
+
+		
+		XMLProducer producer = new XMLProducer();
+		String xml = producer.toRawXML(mcmc);
+		xml = xml.replaceAll("'beast.core.MCMC'", "'online.PartitionMCMC'");
+
+        xml = xml.replaceAll("\\bbeast.evolution.likelihood.ThreadedTreeLikelihood\\b", "beastbooster.likelihood.DuckThreadedTreeLikelihood");
+        xml = xml.replaceAll("\\bbeast.evolution.likelihood.TreeLikelihood\\b", "beastbooster.likelihood.DuckTreeLikelihood");
+		
+//		try {
+//				PrintStream out = new PrintStream(new File("/tmp/beast.xml"));
+//				out.println(xml);
+//				out.close();
+//		} catch (IOException e) {
+//			e.printStackTrace();
+//		}
+	
+		Map<String, String> parserDefinitions = Util.getParserDefinitions(definitions);
+		XMLParser parser = new XMLParser(parserDefinitions, null, false);
+		try {
+			mcmc = (MCMC) parser.parseBareFragment(xml, true);
+		} catch (XMLParserException e) {
+			throw new RuntimeException(e);
+		}
+		return (PartitionMCMC) mcmc;
+	}
+
 }
 

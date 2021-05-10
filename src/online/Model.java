@@ -18,6 +18,7 @@ public class Model {
 	public Distribution posterior;
 	public OperatorSchedule operatorSchedule;
 	public MCMC mcmc;
+	public PartitionMCMC mcmc2;
 	
 	Model() {
 		parameters = new ArrayList<>();

@@ -97,7 +97,13 @@ public class BaseStateExpander extends beast.core.Runnable {
 	}
 	
 	public void step3RunMCMC(Model model2) throws IOException, SAXException, ParserConfigurationException {
-		model2.mcmc.run();
+		if (model2.mcmc2 == null) {
+			PartitionMCMC mcmc = PartitionMCMC.newMCMC(model2, null, chainLengthInput.get(), definitionsInput.get());
+			mcmc.setProportion(0.0);
+			model2.mcmc2 = mcmc;
+			//model2.state = mcmc.startStateInput.get();
+		}
+		model2.mcmc2.run();
 	}
 
 	/** run short MCMC chain on subset of nodes around newTaxon 

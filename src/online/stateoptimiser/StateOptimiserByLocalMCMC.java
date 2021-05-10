@@ -62,7 +62,7 @@ public class StateOptimiserByLocalMCMC extends BEASTObject implements StateOptim
 		}
 		TreePartition partition = determinePartition(model, additions);
 		if (mcmc == null) {
-			mcmc = newMCMC(model, partition);
+			mcmc = PartitionMCMC.newMCMC(model, partition, chainLengthInput.get(), definitionsInput.get());
 		}
 		
 		try {
@@ -78,84 +78,12 @@ public class StateOptimiserByLocalMCMC extends BEASTObject implements StateOptim
 				StateNode s2 = state.getStateNode(i);
 				s1.assignFrom(s2);
 			}
-			mcmc.run();
 		} catch (IOException | SAXException | ParserConfigurationException e) {
 			throw new RuntimeException(e);
 		}
 	}
 
-	private MCMC newMCMC(Model model, TreePartition partition) {
-		List<Operator> operators = new ArrayList<>();
-		// add partition operators
-		ExchangeOnPartition op1 = new ExchangeOnPartition(model.tree, partition, 1.0);
-		op1.setID("ExchangeOnPartition");
-		UniformOnPartition op2 = new UniformOnPartition(model.tree, partition, 3.0);
-		op2.setID("UniformOnPartition");
-		operators.add(op1);
-		operators.add(op2);
-		
-		// add RateScale or RandomWalk operator if required for clock parameters
-		for (Parameter<?> p : model.parameters) {
-			if (Util.isClockModelParameter(p)) {
-				if (p instanceof RealParameter) {
-					// for parameters representing rate per branch
-					RateScaleOnPartition op3 = new RateScaleOnPartition(partition, (RealParameter) p, 1.0);
-					op3.setID("RateScaleOnPartition");
-					operators.add(op3);
-				} else {
-					// for parameters representing category (relaxed clock) or indicator (random clock) per branch
-					RandomWalkOnParition op3 = new RandomWalkOnParition(partition, (IntegerParameter) p, 1.0);
-					op3.setID("RandomWalkOnParition");
-					operators.add(op3);
-				}
-			}
-		}
 
-		
-		Logger screenlog = new Logger();
-		screenlog.initByName("log", model.mcmc.posteriorInput.get(), "logEvery", (int)(long) chainLengthInput.get());
-		
-		MultiStepOperatorScheduleForSingleTree subschedule = new MultiStepOperatorScheduleForSingleTree();
-
-		AfterburnOperatorSchedule operatorSchedule = new AfterburnOperatorSchedule();
-		operatorSchedule.initByName("subschedule",subschedule);
-
-		MCMC mcmc = new MCMC(); 		
-		mcmc.initByName(
-				"distribution", model.mcmc.posteriorInput.get(),
-				"state", model.mcmc.startStateInput.get(),
-				"chainLength", chainLengthInput.get(),
-				"operator", operators,
-				"logger", screenlog,
-				"operatorschedule", operatorSchedule
-		);
-		subschedule.initByName("operator", model.mcmc.operatorsInput.get());
-
-		
-		XMLProducer producer = new XMLProducer();
-		String xml = producer.toRawXML(mcmc);
-		xml = xml.replaceAll("'beast.core.MCMC'", "'online.PartitionMCMC'");
-
-        xml = xml.replaceAll("\\bbeast.evolution.likelihood.ThreadedTreeLikelihood\\b", "beastbooster.likelihood.DuckThreadedTreeLikelihood");
-        xml = xml.replaceAll("\\bbeast.evolution.likelihood.TreeLikelihood\\b", "beastbooster.likelihood.DuckTreeLikelihood");
-		
-//		try {
-//				PrintStream out = new PrintStream(new File("/tmp/beast.xml"));
-//				out.println(xml);
-//				out.close();
-//		} catch (IOException e) {
-//			e.printStackTrace();
-//		}
-	
-		Map<String, String> parserDefinitions = Util.getParserDefinitions(definitionsInput.get());
-		XMLParser parser = new XMLParser(parserDefinitions, null, false);
-		try {
-			mcmc = (MCMC) parser.parseBareFragment(xml, true);
-		} catch (XMLParserException e) {
-			throw new RuntimeException(e);
-		}
-		return mcmc;
-	}
 
 
 

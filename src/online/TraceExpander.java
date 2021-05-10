@@ -255,11 +255,18 @@ public class TraceExpander extends BaseStateExpander {
 
 	@SuppressWarnings("unchecked")
 	private void initLoggers(int cycle) throws IOException {
-		Object o = model2.mcmc.getInput("logger").get();
-		if (o instanceof List<?>) {
-			loggers = (List<Logger>) o;
-		} else {
-			throw new IllegalArgumentException("Expected list of loggers in XML2");
+		if (loggers == null) {
+			Object o = model2.mcmc.getInput("logger").get();
+			if (o instanceof List<?>) {
+				loggers = new ArrayList<>();
+				for (Logger logger : (List<Logger>) o) {
+					if (!logger.isLoggingToStdout()) {
+						loggers.add(logger);
+					}
+				}
+			} else {
+				throw new IllegalArgumentException("Expected list of loggers in XML2");
+			}
 		}
 
 		for (Logger logger : loggers) {
@@ -267,9 +274,9 @@ public class TraceExpander extends BaseStateExpander {
 			if (autoConverge && !logger.isLoggingToStdout()) {
 				String fileName = getFilename(logger.fileNameInput.get(), cycle);
 				logger.fileNameInput.setValue(fileName, logger);
+				logger.initAndValidate();
+				logger.init();
 			}
-			logger.initAndValidate();
-			logger.init();
 		}
 	}
 
@@ -528,20 +535,31 @@ public class TraceExpander extends BaseStateExpander {
 
 	private void processUnThreaded(boolean afterBurnOnly)  throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		if (model1 == null) {
-			model1 = getModelFromFile(xml1Input.get());
-			
 			String stateFile = stateFileInput.get().getPath();
 			if (stateFile == null || stateFile.equals("[[none]]")) {
 				stateFile = xml1Input.get().getPath() + ".state";
 			}		
-			if (new File(stateFile).exists()) {
-		        model1.operatorSchedule.setStateFileName(stateFile);
-		        model1.operatorSchedule.restoreFromFile();	
-		        model2.operatorSchedule.setStateFileName(stateFile);
-		        model2.operatorSchedule.restoreFromFile();	
-    			stateFile = xml2Input.get().getPath() + ".state";
-    	        model2.operatorSchedule.setStateFileName(stateFile);
+
+			if (xml2Input.get() == null || xml2Input.get().getName().equals("[[none]]")) {
+				model1 = model2;
+				if (new File(stateFile).exists()) {
+			        model1.operatorSchedule.setStateFileName(stateFile);
+			        model1.operatorSchedule.restoreFromFile();	
+	    			stateFile = xml2Input.get().getPath() + ".state";
+	    	        model2.operatorSchedule.setStateFileName(stateFile);
+				}
+			} else {
+				model1 = getModelFromFile(xml1Input.get());
+				if (new File(stateFile).exists()) {
+			        model1.operatorSchedule.setStateFileName(stateFile);
+			        model1.operatorSchedule.restoreFromFile();	
+			        model2.operatorSchedule.setStateFileName(stateFile);
+			        model2.operatorSchedule.restoreFromFile();	
+	    			stateFile = xml2Input.get().getPath() + ".state";
+	    	        model2.operatorSchedule.setStateFileName(stateFile);
+				}
 			}
+
 		}
 
         for (int i = 0; i < sampleCount; i++) {
@@ -552,7 +570,7 @@ public class TraceExpander extends BaseStateExpander {
 				model1.state.fromXML(xml);
 				List<String> additions = step1UpdateState(model1, model2);
 				step2OptimiseState(model2, additions);
-				step3RunMCMC(model2);
+				// step3RunMCMC(model2);
 			} else {
 				model2.state.fromXML(xml);
 			}
@@ -626,11 +644,12 @@ public class TraceExpander extends BaseStateExpander {
 	synchronized private void logState(Model model) throws IOException {
 		
 		
-		State other = model.state;
+		State other = model.mcmc2.startStateInput.get();
 		PrintStream sf = new PrintStream(new File(xml2Input.get().getPath()+".state"));
 		sf.println("<itsabeastystatewerein>");
 		sf.println("</itsabeastystatewerein>");
 		sf.close();
+		// TODO: set operator schedule
 		model.operatorSchedule.storeToFile();
 
 		State state = model2.state;
