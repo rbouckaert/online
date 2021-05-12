@@ -41,6 +41,8 @@ public class BinarySearchExpander implements TreeExpander {
 		int leafNodeCount = model2.tree.getLeafNodeCount();
 		initialiseTree(model1, model2);
 		
+		Log.info.print("Adding " + additions.size() + " taxa:");
+		int k = 0;
 		for (String taxon : additions) {
 			if (addTaxon(model1, model2, taxon, leafNodeCount)) {
 				try {
@@ -50,7 +52,14 @@ public class BinarySearchExpander implements TreeExpander {
 					throw new RuntimeException(e);
 				}
 			}
+			k++;
+			if (k%10 == 0) {
+				Log.info.print("|");
+			} else {
+				Log.info.print(".");
+			}
 		}
+		Log.info.println("Done");
 		
 	}
 	

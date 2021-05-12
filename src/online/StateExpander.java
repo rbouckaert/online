@@ -32,7 +32,7 @@ public class StateExpander extends BaseStateExpander {
 		}
 		
 		
-		Log.setLevel(Log.Level.debug);
+		// Log.setLevel(Log.Level.debug);
 		if (seedInput.get() != null) {
 			Randomizer.setSeed(seedInput.get());
 		}
@@ -50,7 +50,9 @@ public class StateExpander extends BaseStateExpander {
         model2.operatorSchedule.restoreFromFile();
 		
 		List<String> additions = step1UpdateState(model1, model2);
-		step2OptimiseState(model2, additions);
+		if (chainLengthInput.get() > 0) {
+			step2OptimiseState(model2, additions);
+		}
 		
 		exportStateFile(model2.state, model1.operatorSchedule);
 		Log.debug("Done!");

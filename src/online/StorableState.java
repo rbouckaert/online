@@ -46,7 +46,7 @@ public class StorableState extends State {
     public void storeToFile(final long sample) {
     	super.storeToFile(sample);
 
-    	if (!storeMultiStateInput.get()) {
+    	if (!storeMultiStateInput.get() || out == null) {
 			return;
 		}
     	

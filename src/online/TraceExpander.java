@@ -452,13 +452,12 @@ public class TraceExpander extends BaseStateExpander {
         			
         			if (!afterBurnOnly) {
         				model1.state.fromXML(xml);
-        				List<String> additions = step1UpdateState(model1, model2);
-        				step2OptimiseState(model2, additions);
-        				step3RunMCMC(model2);
+        				List<String> additions = expander.step1UpdateState(model1, model2);
+        				expander.step2OptimiseState(model2, additions);
         			} else {
         				model2.state.fromXML(xml);
+            			expander.step3RunMCMC(model2);
         			}
-        			step3RunMCMC(model2);
 //
 //        			if (!afterBurnOnly) {
 //        				model1.state.fromXML(xml);
@@ -469,6 +468,9 @@ public class TraceExpander extends BaseStateExpander {
 //        			}
         			logState(model2);
             	}
+            	
+    	        // release memory
+    			expander.optimiser = null;
             } catch (Exception e) {
                 Log.err.println("Something went wrong in a calculation of " + from + " " + to + ": " + e.getMessage());
                 e.printStackTrace();
@@ -531,6 +533,7 @@ public class TraceExpander extends BaseStateExpander {
         	System.setOut(stdout);
         	System.setErr(stderr);
         }
+        
 	}
 
 	private void processUnThreaded(boolean afterBurnOnly)  throws IOException, SAXException, ParserConfigurationException, XMLParserException {
@@ -573,8 +576,8 @@ public class TraceExpander extends BaseStateExpander {
 				// step3RunMCMC(model2);
 			} else {
 				model2.state.fromXML(xml);
+				step3RunMCMC(model2);
 			}
-			step3RunMCMC(model2);
 
 //			Distribution p = model2.mcmc.posteriorInput.get();
 //			double logP2 = model2.state.robustlyCalcPosterior(p);
@@ -583,6 +586,9 @@ public class TraceExpander extends BaseStateExpander {
 //			double logP = p.getCurrentLogP();
 //			System.err.println(logP + " - " + logP2 + " = " + (logP - logP2));
 		}
+        
+        // release memory
+        optimiser = null;
 	}
 
 	

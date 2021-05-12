@@ -13,6 +13,7 @@ import beast.core.Logger;
 import beast.core.MCMC;
 import beast.core.Runnable;
 import beast.core.State;
+import beast.core.util.Log;
 import beast.util.XMLParser;
 
 @Description("Convert multi-state file produced by StorableState to tree and trace logs")
@@ -56,12 +57,14 @@ public class MultiState2Log extends Runnable {
 		long sampleNr = 0;
 		do {
 			stateXML = nextState(fin);
-			state.fromXML(stateXML);
-			state.robustlyCalcPosterior(mcmc.posteriorInput.get());
-			for (Logger logger : mcmc.loggersInput.get()) {
-				logger.log(sampleNr);
+			if (stateXML != null) {
+				state.fromXML(stateXML);
+				state.robustlyCalcPosterior(mcmc.posteriorInput.get());
+				for (Logger logger : mcmc.loggersInput.get()) {
+					logger.log(sampleNr);
+				}
+				sampleNr++;
 			}
-			sampleNr++;
 		} while (stateXML != null);
 
 		for (Logger logger : mcmc.loggersInput.get()) {
@@ -69,6 +72,7 @@ public class MultiState2Log extends Runnable {
 		}
 
         fin.close();
+        Log.warning("Done!");
 	}
 
 	private String nextState(BufferedReader fin) throws IOException {
