@@ -20,8 +20,9 @@ public class IBSP extends TreeDistribution {
     final public Input<RealParameter> populationMeanInput = new Input<>("populationMean", "Mean of the inverse gamma prior distribution on population sizes.", Validate.REQUIRED);
     public Input<Double> ploidyInput = new Input<>("ploidy", "Ploidy (copy number) for the gene, typically a whole number or half (default is 2) "
     		+ "autosomal nuclear: 2, X: 1.5, Y: 0.5, mitrochondrial: 0.5.", 2.0);
-    final public Input<IntegerParameter> groupSizeParamInput = new Input<>("groupSizes",
-            "the group sizes parameter", Validate.REQUIRED);
+    final public Input<IntegerParameter> groupSizeParamInput = new Input<>("groupSizes", "the group sizes parameter", Validate.REQUIRED);
+    final public Input<Boolean> linkedMeanInput = new Input<>("linkedMean", "use populationMean only for first epoch, and for other epochs "
+    		+ "use the posterior mean of the previous epoch", false);
 
     private RealParameter populationShape;
     private RealParameter populationMean;
@@ -33,7 +34,8 @@ public class IBSP extends TreeDistribution {
     
     private IntegerParameter groupSizes;
     private TreeIntervals intervals;
-    private boolean m_bIsPrepared = false;
+    private boolean m_bIsPrepared = false, linkedMean = false;
+    private double prevMean;
 
 
     @Override
@@ -42,6 +44,7 @@ public class IBSP extends TreeDistribution {
     	
     	populationShape = populationShapeInput.get();
     	populationMean = populationMeanInput.get();
+    	linkedMean = linkedMeanInput.get();
     	ploidy = ploidyInput.get();
     	if (ploidy <= 0) {
     		throw new IllegalArgumentException("ploidy should be a positive number, not " + ploidy);
@@ -142,7 +145,9 @@ public class IBSP extends TreeDistribution {
             }
             if (subIndex >= groupSizes[groupIndex]) {
             	logP += analyticalLogP(lineageCounts, groupSizes[groupIndex], intervalSizes);
-            	
+            	if (linkedMean) {
+            		beta = prevMean * (alpha - 1.0);
+            	}
                 groupIndex += 1;
                 subIndex = 0;
                 lineageCounts.clear();
@@ -175,6 +180,8 @@ public class IBSP extends TreeDistribution {
         for (int i = 0; i < eventCounts; i++) {
             logGammaRatio += Math.log(alpha + i);
         }
+        
+        prevMean = (beta + partialGamma/ploidy)/(alpha + eventCounts - 1);
 
         final double logP = 
         		- (alpha + eventCounts) * Math.log(beta + partialGamma / ploidy) 
