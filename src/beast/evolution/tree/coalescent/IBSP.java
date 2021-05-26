@@ -23,6 +23,7 @@ public class IBSP extends TreeDistribution {
     final public Input<IntegerParameter> groupSizeParamInput = new Input<>("groupSizes", "the group sizes parameter", Validate.REQUIRED);
     final public Input<Boolean> linkedMeanInput = new Input<>("linkedMean", "use populationMean only for first epoch, and for other epochs "
     		+ "use the posterior mean of the previous epoch", false);
+    final public Input<Boolean> logMeansInput = new Input<>("logMeans", "log mean population size estimates for each epoch", false);
 
     private RealParameter populationShape;
     private RealParameter populationMean;
@@ -34,7 +35,7 @@ public class IBSP extends TreeDistribution {
     
     private IntegerParameter groupSizes;
     private TreeIntervals intervals;
-    private boolean m_bIsPrepared = false, linkedMean = false;
+    private boolean m_bIsPrepared = false, linkedMean = false, logMeans = false;
     private double prevMean;
 
 
@@ -45,6 +46,7 @@ public class IBSP extends TreeDistribution {
     	populationShape = populationShapeInput.get();
     	populationMean = populationMeanInput.get();
     	linkedMean = linkedMeanInput.get();
+    	logMeans = logMeansInput.get();
     	ploidy = ploidyInput.get();
     	if (ploidy <= 0) {
     		throw new IllegalArgumentException("ploidy should be a positive number, not " + ploidy);
@@ -269,6 +271,11 @@ public class IBSP extends TreeDistribution {
         for (int i = 1; i <= groupSizes.getDimension(); i++) {
         	out.print("ibspGroupSizes." + i+ "\t");
         }
+        if (logMeans) {
+            for (int i = 1; i <= groupSizes.getDimension(); i++) {
+            	out.print("ibspMeanPopSizes." + i+ "\t");
+            }
+        }
 
 	}
 	
@@ -288,7 +295,8 @@ public class IBSP extends TreeDistribution {
         List<Integer> lineageCounts = new ArrayList<>();
         List<Double> intervalSizes = new ArrayList<>();
         double [] popSizes = new double[groupSizes.length];
-        
+    	double [] meanPopSizes = new double[groupSizes.length];
+
         for (int j = 0; j < intervals.getIntervalCount(); j++) {
             lineageCounts.add(intervals.getLineageCount(j));
             intervalSizes.add(intervals.getInterval(j));
@@ -296,7 +304,12 @@ public class IBSP extends TreeDistribution {
                 subIndex += 1;
             }
             if (subIndex >= groupSizes[groupIndex]) {
+            	
             	popSizes[groupIndex] = sample(lineageCounts, groupSizes[groupIndex], intervalSizes);
+            	meanPopSizes[groupIndex] = groupIndex == 0 || !linkedMean ? populationMean.getValue() : prevMean;
+            	if (linkedMean) {
+            		beta = prevMean * (alpha - 1.0);
+            	}
             	
                 groupIndex += 1;
                 subIndex = 0;
@@ -313,9 +326,19 @@ public class IBSP extends TreeDistribution {
         for (int i : groupSizes) {
         	out.print(i + "\t");
         }
+        if (logMeans) {
+            for (double d : meanPopSizes) {
+            	out.print(d + "\t");
+            }
+        }
     }
 
 	
+	private double[] calcMeans() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
 	@Override
 	public void close(PrintStream out) {
 		super.close(out);
@@ -339,6 +362,7 @@ public class IBSP extends TreeDistribution {
 		
 		double alpha = this.alpha + a;
 		double beta = this.beta + b;
+		prevMean = beta / (alpha - 1);
 		 
 		// https://stats.stackexchange.com/questions/224714/sampling-from-an-inverse-gamma-distribution
 		GammaDistribution g = new GammaDistribution(myRandomizer, alpha, 1.0/beta, GammaDistribution.DEFAULT_INVERSE_ABSOLUTE_ACCURACY);
