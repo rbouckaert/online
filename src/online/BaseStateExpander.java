@@ -6,6 +6,7 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -66,7 +67,7 @@ public class BaseStateExpander extends beast.core.Runnable {
 	public void run() throws Exception {
 	}
 
-	
+	/* initialise part of model2 that is not already initialised by that of model1 (and remove parts of the state/tree if necessary) */
 	public List<String> step1UpdateState(Model model1, Model model2) throws IOException, SAXException, ParserConfigurationException, XMLParserException {
 		
 		List<String> exclusions = new ArrayList<>();
@@ -251,50 +252,57 @@ public class BaseStateExpander extends beast.core.Runnable {
 			model2.state.acceptCalculationNodes();
 		}
 		
+		Map<String, StateNode> snMap2 = new HashMap<>();
+		for (int i = 0; i < s2.size(); i++) {
+			snMap2.put(s2.get(i).getID(), s2.get(i));
+		}		
+		
 		for (int i = 0; i < s1.size(); i++) {
 			StateNode sn1 = s1.get(i);
-			StateNode sn2 = s2.get(i);
-			// sanity check
-			if (!sn1.getID().equals(sn2.getID()) || sn1.getClass() != sn2.getClass()) {
-				throw new IllegalArgumentException("Different states found");
-			}
-			
-			// copy under some conditions
-			if (!(sn1 instanceof Tree)) {
-				if (sn1 instanceof Parameter<?>) {
-					if (((Parameter<?>)sn1).getDimension() == ((Parameter<?>)sn2).getDimension()) {
-						if (sn1 instanceof IntegerParameter && sn1.getID().startsWith("bGroupSizes")) {
-							sn2.assignFrom(sn1);
-							IntegerParameter p = (IntegerParameter) sn2;
-							int k = 0;
-							for (int j = 0; j < deltaTaxaCount; j++) {
-								p.setValue(k, p.getValue(k) + 1);
-								k += 1;
-								if (k == p.getDimension()) {
-									k = 0;
+			if (snMap2.containsKey(sn1.getID())) {
+				StateNode sn2 = snMap2.get(sn1.getID());
+				// sanity check
+				if (!sn1.getID().equals(sn2.getID()) || sn1.getClass() != sn2.getClass()) {
+					throw new IllegalArgumentException("Different states found");
+				}
+				
+				// copy under some conditions
+				if (!(sn1 instanceof Tree)) {
+					if (sn1 instanceof Parameter<?>) {
+						if (((Parameter<?>)sn1).getDimension() == ((Parameter<?>)sn2).getDimension()) {
+							if (sn1 instanceof IntegerParameter && sn1.getID().startsWith("bGroupSizes")) {
+								sn2.assignFrom(sn1);
+								IntegerParameter p = (IntegerParameter) sn2;
+								int k = 0;
+								for (int j = 0; j < deltaTaxaCount; j++) {
+									p.setValue(k, p.getValue(k) + 1);
+									k += 1;
+									if (k == p.getDimension()) {
+										k = 0;
+									}
+								}
+							} else {
+								sn2.assignFrom(sn1);
+							}
+						} else {
+							model1.parameters.add((Parameter<?>)sn1);
+							model2.parameters.add((Parameter<?>)sn2);
+							// get meta data values from tree, copied when tree1 was copied to tree2
+							Parameter<?> p1 = (Parameter<?>) sn1;
+							Parameter<?> p2 = (Parameter<?>) sn2;
+							if (p1 instanceof RealParameter) {
+								for (int j = 0; j < p1.getDimension(); j++) {
+									((RealParameter)p2).setValue((Double)p1.getValue(j));
+								}
+							} else {
+								for (int j = 0; j < p1.getDimension(); j++) {
+									((IntegerParameter)p2).setValue((Integer)p1.getValue(j));
 								}
 							}
-						} else {
-							sn2.assignFrom(sn1);
 						}
 					} else {
-						model1.parameters.add((Parameter<?>)sn1);
-						model2.parameters.add((Parameter<?>)sn2);
-						// get meta data values from tree, copied when tree1 was copied to tree2
-						Parameter<?> p1 = (Parameter<?>) sn1;
-						Parameter<?> p2 = (Parameter<?>) sn2;
-						if (p1 instanceof RealParameter) {
-							for (int j = 0; j < p1.getDimension(); j++) {
-								((RealParameter)p2).setValue((Double)p1.getValue(j));
-							}
-						} else {
-							for (int j = 0; j < p1.getDimension(); j++) {
-								((IntegerParameter)p2).setValue((Integer)p1.getValue(j));
-							}
-						}
+						sn2.assignFrom(sn1);
 					}
-				} else {
-					sn2.assignFrom(sn1);
 				}
 			}
 		}

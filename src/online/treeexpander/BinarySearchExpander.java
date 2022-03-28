@@ -26,7 +26,7 @@ import beast.evolution.tree.Tree;
 import beast.util.XMLParserException;
 import online.Model;
 
-@Description("Tree Exapnder that adds new taxa in by binary search of "
+@Description("Tree Expander that adds new taxa in by binary search of "
 		+ "posterior fit starting from the root.")
 public class BinarySearchExpander implements TreeExpander {
 	private Map<String, Integer> map;
