@@ -1,10 +1,8 @@
 package online.stateoptimiser;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import javax.xml.parsers.ParserConfigurationException;
@@ -14,42 +12,31 @@ import org.xml.sax.SAXException;
 import beast.core.BEASTObject;
 import beast.core.Description;
 import beast.core.Input;
-import beast.core.Logger;
 import beast.core.MCMC;
-import beast.core.Operator;
 import beast.core.State;
 import beast.core.StateNode;
 import beast.core.parameter.IntegerParameter;
-import beast.core.parameter.Parameter;
-import beast.core.parameter.RealParameter;
 import beast.evolution.tree.Node;
-import beast.util.XMLParser;
-import beast.util.XMLParserException;
-import beast.util.XMLProducer;
-import beastbooster.operators.MultiStepOperatorScheduleForSingleTree;
 import online.Model;
 import online.PartitionMCMC;
-import online.Util;
-import online.operators.AfterburnOperatorSchedule;
-import online.operators.ExchangeOnPartition;
-import online.operators.RandomWalkOnParition;
-import online.operators.RateScaleOnPartition;
 import online.operators.TreePartition;
-import online.operators.UniformOnPartition;
 
 @Description("Optimises state by runnin MCMC on nodes and parameters in the partition only")
 public class StateOptimiserByLocalMCMC extends BEASTObject implements StateOptimiser {
-	final public Input<Long> chainLengthInput = new Input<>("chainLength", "Length of the MCMC chain used after placement of taxa", 1000L);
-	final public Input<String> definitionsInput = new Input<>("definitions","comma separated list of definitions used in the XML (like the -D option for BEAST)", "");
+	final public Input<Long> chainLengthInput = new Input<>("chainLength",
+			"Length of the MCMC chain used after placement of taxa", 1000L);
+	final public Input<String> definitionsInput = new Input<>("definitions",
+			"comma separated list of definitions used in the XML (like the -D option for BEAST)", "");
 
 	private MCMC mcmc = null;
-	
-	public StateOptimiserByLocalMCMC() {}
-	
+
+	public StateOptimiserByLocalMCMC() {
+	}
+
 	public StateOptimiserByLocalMCMC(Long chainLength, String definitions) {
 		initByName("chainLength", chainLength, "definitions", definitions);
 	}
-	
+
 	@Override
 	public void initAndValidate() {
 	}
@@ -64,13 +51,13 @@ public class StateOptimiserByLocalMCMC extends BEASTObject implements StateOptim
 		if (mcmc == null) {
 			mcmc = PartitionMCMC.newMCMC(model, partition, chainLengthInput.get(), definitionsInput.get());
 		}
-		
+
 		try {
-			((PartitionMCMC)mcmc).initState(model.state.toXML(0));
-			((PartitionMCMC)mcmc).setProportion(1.0);
-			
+			((PartitionMCMC) mcmc).initState(model.state.toXML(0));
+			((PartitionMCMC) mcmc).setProportion(1.0);
+
 			mcmc.run();
-			
+
 			State state = mcmc.startStateInput.get();
 			State other = model.state;
 			for (int i = 0; i < state.getNrOfStateNodes(); i++) {
@@ -83,10 +70,6 @@ public class StateOptimiserByLocalMCMC extends BEASTObject implements StateOptim
 		}
 	}
 
-
-
-
-
 	protected TreePartition determinePartition(Model model, List<String> additions) {
 		Set<Integer> values = new HashSet<>();
 		for (String taxonName : additions) {
@@ -96,7 +79,7 @@ public class StateOptimiserByLocalMCMC extends BEASTObject implements StateOptim
 			addToPartition(parent, values);
 			addToPartition(parent.getLeft(), values);
 			addToPartition(parent.getRight(), values);
-			
+
 			if (!parent.isRoot()) {
 				Node gp = parent.getParent();
 				addToPartition(gp, values);
@@ -104,12 +87,11 @@ public class StateOptimiserByLocalMCMC extends BEASTObject implements StateOptim
 				addToPartition(gp.getRight(), values);
 			}
 		}
-		
-		IntegerParameter index = new IntegerParameter(values.toArray(new Integer[]{}));
+
+		IntegerParameter index = new IntegerParameter(values.toArray(new Integer[] {}));
 		TreePartition partition = new TreePartition(model.tree, index);
 		return partition;
 	}
-
 
 	private int indexOf(String taxonName, String[] taxaNames) {
 		for (int i = 0; i < taxaNames.length; i++) {
@@ -119,7 +101,7 @@ public class StateOptimiserByLocalMCMC extends BEASTObject implements StateOptim
 		}
 		throw new IllegalArgumentException("Taxon " + taxonName + " not found in tree");
 	}
-	
+
 	protected void addToPartition(Node node, Set<Integer> values) {
 		if (node.isLeaf()) {
 			return;
