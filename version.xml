@@ -1,7 +1,10 @@
 <package name='online' version='0.0.1'>
-	<depends on='beast2' atleast='2.6.0'/>
+	<depends on='beast2' atleast='2.6.6'/>
 	<depends on='BEASTLabs' atleast='1.9.6'/>
-	
+	<depends on='BEASTBooster' atleast='0.0.1'/>
+	<depends on='ORC' atleast='1.0.3'/>
+	<depends on='FastRelaxedClockLogNormal' atleast='1.1.1'/>
+		
 	<packageapp description="StateExpander creates good starting state from an old starting state"
               class="online.StateExpander"
               args=""

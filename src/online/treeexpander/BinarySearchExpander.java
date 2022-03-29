@@ -229,6 +229,10 @@ public class BinarySearchExpander implements TreeExpander {
 			nr[0]++;			
 		} else { // node is leaf
 			int i = node.getNr();
+			if (node.getID() == null || map == null || map.get(node.getID()) == null) {
+				Log.warning("WARNING: programmer error -- Taxon found " + node.getID() + " that should have been removed");
+				Log.warning("WARNING: Expect a crash.");
+			}
 			if (i != map.get(node.getID())) {
 				Log.debug(node.getID() + " " + i +" => " + map.get(node.getID()));
 				node.setNr(map.get(node.getID()));

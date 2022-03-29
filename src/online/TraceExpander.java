@@ -64,14 +64,13 @@ public class TraceExpander extends BaseStateExpander {
 			+ "Set 'criterion' to 'none' to stop after first cycle. "
 			+ "This is a comma separated list matching with one threshold for each convergence criterion", 0.4);
     
-	final public Input<String> tempDirInput = new Input<>("tempDir","directory where temporary files are written."
-			+ "(Ignored if maxRInput < 1).", "/tmp/");
+	final public Input<String> tempDirInput = new Input<>("tempDir","directory where temporary files are written.", "/tmp/");
     final public Input<String> criterionInput = new Input<>("criterion",
 			"Comma separated list of convergence criteria. "
 			+ "If not set to 'none', the chain keeps afterburning (with chainLength steps) till all items in trace log converge according to all criteria. " +
     		DistributionComparator.convergenceCriterionDescription, 
-    		ConvergenceCriterion.corr+"");
-    final public Input<Integer> maxCycleInput = new Input<>("maxCycle", "maximum number of cycles before stopping. Ignored if negative (which is the default)", -1);
+    		ConvergenceCriterion.never+"");
+    final public Input<Integer> maxCycleInput = new Input<>("maxCycle", "maximum number of cycles before stopping. Ignored if negative (4 by default)", 4);
     
     
     private int nrOfThreads;
@@ -209,7 +208,7 @@ public class TraceExpander extends BaseStateExpander {
 		
 		double maxStat = Double.MIN_VALUE, minStat = Double.MAX_VALUE;
 		DistributionComparator comparator = new DistributionComparator();
-		comparator.setVerbose(true);
+		comparator.setVerbose(!(criterion.equals(ConvergenceCriterion.always) || criterion.equals(ConvergenceCriterion.never)));
 		for (Logger logger : loggers) {
 			if (!logger.isLoggingToStdout() && logger.mode == Logger.LOGMODE.compound) {
 				String fileName1 = getFilename(logger.fileNameInput.get(), cycle);
@@ -454,18 +453,12 @@ public class TraceExpander extends BaseStateExpander {
         				model1.state.fromXML(xml);
         				List<String> additions = expander.step1UpdateState(model1, model2);
         				expander.step2OptimiseState(model2, additions);
+            			expander.step3RunMCMC(model2);
         			} else {
         				model2.state.fromXML(xml);
             			expander.step3RunMCMC(model2);
         			}
-//
-//        			if (!afterBurnOnly) {
-//        				model1.state.fromXML(xml);
-//        				expander.updateState(model1, model2);
-//        			} else {
-//        				model2.state.fromXML(xml);
-//        				expander.afterBurner(model2, new ArrayList<>(), 0.0);
-//        			}
+
         			logState(model2);
             	}
             	
@@ -573,18 +566,13 @@ public class TraceExpander extends BaseStateExpander {
 				model1.state.fromXML(xml);
 				List<String> additions = step1UpdateState(model1, model2);
 				step2OptimiseState(model2, additions);
-				// step3RunMCMC(model2);
+				step3RunMCMC(model2);
 			} else {
 				model2.state.fromXML(xml);
 				step3RunMCMC(model2);
 			}
 
-//			Distribution p = model2.mcmc.posteriorInput.get();
-//			double logP2 = model2.state.robustlyCalcPosterior(p);
 			logState(model2);
-
-//			double logP = p.getCurrentLogP();
-//			System.err.println(logP + " - " + logP2 + " = " + (logP - logP2));
 		}
         
         // release memory
@@ -594,7 +582,7 @@ public class TraceExpander extends BaseStateExpander {
 	
 	private String prevStartState = null;
 	synchronized private String nextState() throws IOException {
-		int target = (currentSampleNr + 1)* availableSamples / sampleCount;
+		int target = (currentSampleNr + 1) * availableSamples / sampleCount;
 		if (target > availableSamples) {
 			target = availableSamples;
 		}
@@ -628,6 +616,14 @@ public class TraceExpander extends BaseStateExpander {
 					b.delete(0, b.length());
 				}
 			}
+		}
+		if (prevStartState != null) {
+			Log.warning("Ran out of states in state file ");
+			Log.warning("target = " + target);
+			Log.warning("currentSampleNr = " + currentSampleNr);
+			Log.warning("availableSamples = " + availableSamples);
+			Log.warning("sampleCount = " + sampleCount);
+			return prevStartState;
 		}
 		throw new RuntimeException("Ran out of states in state file");
 	}
