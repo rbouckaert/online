@@ -102,8 +102,8 @@ public class BaseStateExpander extends beast.core.Runnable {
 			PartitionMCMC mcmc = PartitionMCMC.newMCMC(model2, null, chainLengthInput.get(), definitionsInput.get());
 			mcmc.setProportion(0.0);
 			model2.mcmc2 = mcmc;
-			//model2.state = mcmc.startStateInput.get();
 		}
+		model2.mcmc2.startStateInput.set(model2.state);
 		model2.mcmc2.run();
 	}
 

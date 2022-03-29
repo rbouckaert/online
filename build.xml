@@ -92,7 +92,7 @@
 		<mkdir dir="${buildonline}" />
 
 		<!-- Compile the java code from ${srconline} into ${buildonline} /bin -->
-		<javac srcdir="${srconline}" destdir="${buildonline}" classpathref="classpath" 
+		<javac target="1.8" srcdir="${srconline}" destdir="${buildonline}" classpathref="classpath" 
 		       fork="true"
 		       memoryinitialsize="256m"
 		       memorymaximumsize="256m">

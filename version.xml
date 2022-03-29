@@ -10,4 +10,10 @@
               class="online.TraceExpander"
               args=""
             />
+            
+    <packageapp description="Various ways to compare two distributions"
+              class="online.math.DistributionComparator"
+              args=""
+            />
+            
 </package>

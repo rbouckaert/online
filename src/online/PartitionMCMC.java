@@ -50,6 +50,9 @@ public class PartitionMCMC extends MCMC {
 	@Override
 	public void run() throws IOException, SAXException, ParserConfigurationException {
 		
+		if (state != startStateInput.get()) {
+			assignState(startStateInput.get(), state);
+		}
         // set up state (again). Other beastObjects may have manipulated the
         // StateNodes, e.g. set up bounds or dimensions
         state.initAndValidate();
@@ -80,11 +83,26 @@ public class PartitionMCMC extends MCMC {
         loggers = loggersInput.get();
         doLoop();
 
-        
+		if (state != startStateInput.get()) {
+			assignState(state, startStateInput.get());
+		}
+
     } // run;
    
 
-    boolean infinityEncountered = false;
+    private void assignState(State stateSource, State stateTarget) {
+		List<StateNode> s1 = stateSource.stateNodeInput.get();
+		List<StateNode> s2 = stateTarget.stateNodeInput.get();
+
+		for (int i = 0; i < s1.size(); i++) {
+			StateNode sn1 = s1.get(i);
+			StateNode sn2 = s2.get(i);
+			sn2.assignFrom(sn1);
+		}		
+	}
+
+
+	boolean infinityEncountered = false;
     protected void doLoop() throws IOException {
         int corrections = 0;
         final boolean isStochastic = posterior.isStochastic();
@@ -221,7 +239,7 @@ public class PartitionMCMC extends MCMC {
 		Map<String, String> parserDefinitions = Util.getParserDefinitions(definitions);
 		XMLParser parser = new XMLParser(parserDefinitions, null, false);
 		try {
-			mcmc = (MCMC) parser.parseBareFragment(xml, true);
+			mcmc = (MCMC) parser.parseBareFragment(xml, true);			
 		} catch (XMLParserException e) {
 			throw new RuntimeException(e);
 		}

@@ -20,16 +20,18 @@ import beast.util.LogAnalyser;
 public class DistributionComparator extends Runnable {
 
 	
-	public enum ConvergenceCriterion {GR, SplitR, KS, mean, KDE, corr, interval, never, always}
+	public enum ConvergenceCriterion {GR, SplitR, KS, mean, KDE, corr, interval, never, always} // keep 'never' and 'always' at the end of this list!
+	// this ensures that allStats() produces results with the last two columns missing
+	// If new statistics are added they should be added before 'never'
 	final public static String convergenceCriterionDescription = "Criterion for testig convergence:"
 			+ "always for always accepting equality, "
 			+ "never for never accepting equality, "
     		+ "GR for Gelman-Rubin statistic, "
     		+ "SplitR for use split-R estimate of Gelman-Rubin statistic, "
-    		+ "KS for Kolmogorov Smirnov test at p=5% "
-    		+ "KDE for difference in distribution by kernel density estimate "
-    		+ "mean for checking difference of means with stdev=(2*error1+2*error2) "
-    		+ "corr for correlation between pairs "
+    		+ "KS p-value for Kolmogorov Smirnov test under the null hypothesis that distribution are the same, "
+    		+ "KDE for difference in distribution by kernel density estimate, "
+    		+ "mean for checking difference of means with stdev=(2*error1+2*error2), "
+    		+ "corr for correlation between pairs, "
     		+ "interval for fraction of 95%HPD being shrunk";
 	final public Input<List<LogFile>> traceInput = new Input<>("log", "two or more trace files to compare", new ArrayList<>());
 	final public Input<Integer> burnInPercentageInput = new Input<>("burnin", "percentage of trace logs to used as burn-in (and will be ignored)", 10);
@@ -100,17 +102,17 @@ public class DistributionComparator extends Runnable {
 		for (int i = 1; i < trace.length; i++) {
 			int j = i / 2;
 			Log.info(traceFiles.get(j).getName() + "--" + traceFiles.get(i).getName());
-			Log.info(space + " " + Arrays.toString(ConvergenceCriterion.values()).replaceAll(", ","\t").replaceAll("[\\[\\]]",""));
+			Log.info(space + " " + Arrays.toString(ConvergenceCriterion.values()).replaceAll(", ","\t").replaceAll("[\\[\\]]","").replaceAll("never", "").replaceAll("always", ""));
 			for (int k = 0; k < stats.length; k++) {
 				String label = trace[0].getLabels().get(k);
 				Log.info.print(label + (label.length() < space.length() ? space.substring(label.length()) : " ") + " ");
-				for (r = 0; r < allstats[0].length; r++) {
+				for (r = 0; r < allstats[0].length-2; r++) {
 					Log.info.print(formatter.format(allstats[(i-1) * stats.length + k][r]) + "\t");
 				}
 				Log.info.println();
 			}
 			Log.info.print("Total:" + space.substring(5));
-			for (r = 0; r < allstats[0].length; r++) {
+			for (r = 0; r < allstats[0].length-2; r++) {
 				Log.info.print(formatter.format(extremes[i-1][r]) + "\t");
 			}
 			Log.info.println();
@@ -157,6 +159,7 @@ public class DistributionComparator extends Runnable {
 				break;
 			case interval:
 				stat = calcIntervalFraction(log1, log2, i+1);
+				break;
 			case corr:
 				stat = calcCorrelation(trace1[i+1],  log1.getStdDev(i+1), 
 						trace2[i+1], log2.getStdDev(i+1));
@@ -174,8 +177,8 @@ public class DistributionComparator extends Runnable {
 			}
 		}
 		switch (criterion) {
-			case KS:
-				return minStat;
+			//case KS:
+			//	return minStat;
 			default:
 				return maxStat;
 		}
