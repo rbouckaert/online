@@ -1,9 +1,26 @@
-<package name='online' version='0.0.1'>
-	<depends on='beast2' atleast='2.6.6'/>
-	<depends on='BEASTLabs' atleast='1.9.6'/>
-	<depends on='BEASTBooster' atleast='0.0.1'/>
-	<depends on='ORC' atleast='1.0.3'/>
-	<depends on='FastRelaxedClockLogNormal' atleast='1.1.1'/>
+<package name='online' version='0.0.2'>
+    <depends on='BEAST.base' atleast='2.7.0'/>
+    <depends on='BEAST.app' atleast='2.7.0'/>
+    <depends on='BEASTLabs' atleast='2.0.0'/>
+	<depends on='BEASTBooster' atleast='0.0.2'/>
+		
+    <service type="beast.base.core.BEASTInterface">
+        <provider classname="online.BaseStateExpander"/>
+        <provider classname="online.math.DistributionComparator"/>
+        <provider classname="online.operators.AfterburnOperatorSchedule"/>
+        <provider classname="online.operators.ExchangeOnPartition"/>
+        <provider classname="online.operators.RandomWalkOnParition"/>
+        <provider classname="online.operators.RateScaleOnPartition"/>
+        <provider classname="online.operators.TreePartition"/>
+        <provider classname="online.operators.UniformOnPartition"/>
+        <provider classname="online.PartitionMCMC"/>
+        <provider classname="online.StateExpander"/>
+        <provider classname="online.stateoptimiser.StateOptimiserByLocalMCMC"/>
+        <provider classname="online.StorableState"/>
+        <provider classname="online.tools.Log2MultiState"/>
+        <provider classname="online.tools.MultiState2Log"/>
+        <provider classname="online.TraceExpander"/>
+    </service>
 		
 	<packageapp description="StateExpander creates good starting state from an old starting state"
               class="online.StateExpander"

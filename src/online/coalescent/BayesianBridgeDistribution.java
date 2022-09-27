@@ -1,4 +1,4 @@
-package beast.evolution.tree.coalescent;
+package online.coalescent;
 
 import org.apache.commons.math.distribution.Distribution;
 

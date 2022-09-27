@@ -1,4 +1,4 @@
-package beast.evolution.tree.coalescent;
+package online.coalescent;
 
 import java.util.List;
 import java.util.Random;
