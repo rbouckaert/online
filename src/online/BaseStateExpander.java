@@ -14,24 +14,24 @@ import javax.xml.parsers.ParserConfigurationException;
 
 import org.xml.sax.SAXException;
 
-import beast.app.util.XMLFile;
-import beast.core.Description;
-import beast.core.Distribution;
-import beast.core.Input;
-import beast.core.MCMC;
-import beast.core.OperatorSchedule;
-import beast.core.Runnable;
-import beast.core.State;
-import beast.core.StateNode;
-import beast.core.StateNodeInitialiser;
-import beast.core.parameter.IntegerParameter;
-import beast.core.parameter.Parameter;
-import beast.core.parameter.RealParameter;
-import beast.core.util.Log;
-import beast.evolution.tree.Node;
-import beast.evolution.tree.Tree;
-import beast.util.XMLParser;
-import beast.util.XMLParserException;
+import beastfx.app.util.XMLFile;
+import beast.base.core.Description;
+import beast.base.inference.Distribution;
+import beast.base.core.Input;
+import beast.base.inference.MCMC;
+import beast.base.inference.OperatorSchedule;
+import beast.base.inference.Runnable;
+import beast.base.inference.State;
+import beast.base.inference.StateNode;
+import beast.base.inference.StateNodeInitialiser;
+import beast.base.inference.parameter.IntegerParameter;
+import beast.base.inference.parameter.Parameter;
+import beast.base.inference.parameter.RealParameter;
+import beast.base.core.Log;
+import beast.base.evolution.tree.Node;
+import beast.base.evolution.tree.Tree;
+import beast.base.parser.XMLParser;
+import beast.base.parser.XMLParserException;
 import online.stateoptimiser.StateOptimiser;
 import online.stateoptimiser.StateOptimiserByLocalMCMC;
 import online.treeexpander.BinarySearchExpander;
@@ -41,7 +41,7 @@ import online.treeexpander.BinarySearchExpander;
 // automatically determines chain length, based on Gelman Rubin or other statistic
 
 @Description("Base class for create a new state extending an input state with different set of taxa")
-public class BaseStateExpander extends beast.core.Runnable {
+public class BaseStateExpander extends beast.base.inference.Runnable {
 	final public Input<XMLFile> xml1Input = new Input<>("xml1", "BEAST XML file with initial state", new XMLFile("[[none]]"));
 	
 	final public Input<Long> chainLengthInput = new Input<>("chainLength", "Length of the MCMC chain used after placement of taxa", 1000L);

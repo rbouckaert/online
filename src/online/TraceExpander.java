@@ -19,19 +19,19 @@ import javax.xml.parsers.ParserConfigurationException;
 
 import org.xml.sax.SAXException;
 
-import beast.app.tools.LogCombiner;
-import beast.app.util.Application;
-import beast.app.util.XMLFile;
-import beast.core.Description;
-import beast.core.Distribution;
-import beast.core.Input;
-import beast.core.Logger;
-import beast.core.Logger.LogFileMode;
-import beast.core.State;
-import beast.core.StateNode;
-import beast.core.util.Log;
-import beast.util.Randomizer;
-import beast.util.XMLParserException;
+import beastfx.app.tools.LogCombiner;
+import beastfx.app.tools.Application;
+import beastfx.app.util.XMLFile;
+import beast.base.core.Description;
+import beast.base.inference.Distribution;
+import beast.base.core.Input;
+import beast.base.inference.Logger;
+import beast.base.inference.Logger.LogFileMode;
+import beast.base.inference.State;
+import beast.base.inference.StateNode;
+import beast.base.core.Log;
+import beast.base.util.Randomizer;
+import beast.base.parser.XMLParserException;
 import online.math.DistributionComparator;
 import online.math.DistributionComparator.ConvergenceCriterion;
 

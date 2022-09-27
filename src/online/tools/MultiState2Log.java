@@ -1,20 +1,21 @@
 package online.tools;
 
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 
-import beast.app.util.Application;
-import beast.app.util.XMLFile;
-import beast.core.Description;
-import beast.core.Input;
-import beast.core.Logger;
-import beast.core.MCMC;
-import beast.core.Runnable;
-import beast.core.State;
-import beast.core.util.Log;
-import beast.util.XMLParser;
+import beastfx.app.tools.Application;
+import beastfx.app.util.XMLFile;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.inference.Logger;
+import beast.base.inference.MCMC;
+import beast.base.inference.Runnable;
+import beast.base.inference.State;
+import beast.base.core.Log;
+import beast.base.parser.XMLParser;
 
 @Description("Convert multi-state file produced by StorableState to tree and trace logs")
 public class MultiState2Log extends Runnable {

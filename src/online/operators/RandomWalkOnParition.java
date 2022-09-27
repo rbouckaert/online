@@ -1,11 +1,11 @@
 package online.operators;
 
-import beast.core.Description;
-import beast.core.Input;
-import beast.core.Operator;
-import beast.core.Input.Validate;
-import beast.core.parameter.IntegerParameter;
-import beast.util.Randomizer;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.inference.Operator;
+import beast.base.core.Input.Validate;
+import beast.base.inference.parameter.IntegerParameter;
+import beast.base.util.Randomizer;
 
 @Description("A random walk operator that selects a random dimension of the integer parameter from a partition "
 		+ "and perturbs the value a random amount within +/- windowSize.")
@@ -40,7 +40,8 @@ public class RandomWalkOnParition extends Operator implements PartitionOperator 
     @Override
     public double proposal() {
 
-        final IntegerParameter param = parameterInput.get(this);
+        final IntegerParameter param = parameterInput.get();
+        param.startEditing(this);
 
         final int i = param.getDimension() %2 == 0 ?
         				partition.getRandomNodeNotRoot() :

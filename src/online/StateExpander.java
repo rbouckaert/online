@@ -4,11 +4,14 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-import beast.app.util.Application;
-import beast.app.util.XMLFile;
-import beast.core.*;
-import beast.core.util.Log;
-import beast.util.Randomizer;
+import beastfx.app.tools.Application;
+import beastfx.app.util.XMLFile;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.core.Log;
+import beast.base.inference.OperatorSchedule;
+import beast.base.inference.State;
+import beast.base.util.Randomizer;
 
 @Description("Create state file extending an input state file with different set of taxa")
 public class StateExpander extends BaseStateExpander {

@@ -51,13 +51,13 @@ package online.operators;
 
 import java.text.DecimalFormat;
 
-import beast.core.Description;
-import beast.core.Input;
-import beast.evolution.operators.TreeOperator;
-import beast.evolution.tree.Node;
-import beast.evolution.tree.Tree;
-import beast.evolution.tree.TreeInterface;
-import beast.util.Randomizer;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.evolution.operator.TreeOperator;
+import beast.base.evolution.tree.Node;
+import beast.base.evolution.tree.Tree;
+import beast.base.evolution.tree.TreeInterface;
+import beast.base.util.Randomizer;
 
 
 @Description("Randomly selects true internal tree node (i.e. not the root) and move node height uniformly in interval " +

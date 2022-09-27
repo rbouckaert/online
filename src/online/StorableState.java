@@ -5,9 +5,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 
-import beast.core.Description;
-import beast.core.Input;
-import beast.core.State;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.inference.State;
 
 @Description("State that stores a history of states in a multi-state file")
 public class StorableState extends State {

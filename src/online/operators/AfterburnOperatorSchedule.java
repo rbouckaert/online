@@ -1,8 +1,8 @@
 package online.operators;
 
-import beast.core.Description;
-import beast.core.Operator;
-import beast.core.OperatorSchedule;
+import beast.base.core.Description;
+import beast.base.inference.Operator;
+import beast.base.inference.OperatorSchedule;
 
 @Description("Operator schedule that initially only uses proposals from PartitionOperators "
 		+ "then later include all operators")

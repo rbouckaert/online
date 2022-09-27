@@ -4,13 +4,13 @@ import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.Comparator;
 
-import beast.app.util.Application;
-import beast.app.util.OutFile;
-import beast.core.Description;
-import beast.core.Input;
-import beast.core.Runnable;
-import beast.core.util.Log;
-import beast.util.Randomizer;
+import beastfx.app.tools.Application;
+import beastfx.app.util.OutFile;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.inference.Runnable;
+import beast.base.core.Log;
+import beast.base.util.Randomizer;
 
 @Description("Generates trait set with taxa sampled back in time")
 public class SampleTimeGenerator extends Runnable {
@@ -52,7 +52,7 @@ public class SampleTimeGenerator extends Runnable {
 			out = new PrintStream(outputInput.get());
 		}
 
-		out.println("<trait id=\"datetrait\" spec=\"beast.evolution.tree.TraitSet\" traitname=\"date-backward\">");
+		out.println("<trait id=\"datetrait\" spec=\"beast.base.evolution.tree.TraitSet\" traitname=\"date-backward\">");
 		for (int i = 0; i < n; i++) {
 			out.println("t"+i+" = " + times[i] + (i<n-1?",":""));
 		}

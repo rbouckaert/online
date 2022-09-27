@@ -2,7 +2,7 @@ package online.treeexpander;
 
 import java.util.List;
 
-import beast.core.Description;
+import beast.base.core.Description;
 import online.Model;
 
 @Description("Class for updating a tree in a state based on another tree")

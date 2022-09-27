@@ -3,10 +3,10 @@ package online;
 import java.util.HashMap;
 import java.util.Map;
 
-import beast.core.BEASTInterface;
-import beast.core.parameter.Parameter;
-import beast.evolution.branchratemodel.BranchRateModel;
-import beast.util.XMLParserException;
+import beast.base.core.BEASTInterface;
+import beast.base.inference.parameter.Parameter;
+import beast.base.evolution.branchratemodel.BranchRateModel;
+import beast.base.parser.XMLParserException;
 
 public class Util {
 
@@ -72,10 +72,10 @@ public class Util {
 	//		
 	//		XMLProducer producer = new XMLProducer();
 	//		String xml = producer.toRawXML(mcmc);
-	//		xml = xml.replaceAll("'beast.core.MCMC'", "'online.PartitionMCMC'");
+	//		xml = xml.replaceAll("'beast.base.inference.MCMC'", "'online.PartitionMCMC'");
 	//
-	//        xml = xml.replaceAll("\\bbeast.evolution.likelihood.ThreadedTreeLikelihood\\b", "beastbooster.likelihood.DuckThreadedTreeLikelihood");
-	//        xml = xml.replaceAll("\\bbeast.evolution.likelihood.TreeLikelihood\\b", "beastbooster.likelihood.DuckTreeLikelihood");
+	//        xml = xml.replaceAll("\\bbeast.base.evolution.likelihood.ThreadedTreeLikelihood\\b", "beastbooster.likelihood.DuckThreadedTreeLikelihood");
+	//        xml = xml.replaceAll("\\bbeast.base.evolution.likelihood.TreeLikelihood\\b", "beastbooster.likelihood.DuckTreeLikelihood");
 	//		
 	////	try {
 	////			PrintStream out = new PrintStream(new File("/tmp/beast.xml"));

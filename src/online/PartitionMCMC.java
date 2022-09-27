@@ -12,14 +12,19 @@ import javax.xml.parsers.ParserConfigurationException;
 
 import org.xml.sax.SAXException;
 
-import beast.core.*;
-import beast.core.parameter.IntegerParameter;
-import beast.core.parameter.Parameter;
-import beast.core.parameter.RealParameter;
-import beast.core.util.Log;
-import beast.util.XMLParser;
-import beast.util.XMLParserException;
-import beast.util.XMLProducer;
+import beast.base.inference.Logger;
+import beast.base.inference.MCMC;
+import beast.base.inference.Operator;
+import beast.base.inference.State;
+import beast.base.inference.StateNode;
+import beast.base.inference.parameter.IntegerParameter;
+import beast.base.inference.parameter.Parameter;
+import beast.base.inference.parameter.RealParameter;
+import beast.base.core.Description;
+import beast.base.core.Log;
+import beast.base.parser.XMLParser;
+import beast.base.parser.XMLParserException;
+import beast.base.parser.XMLProducer;
 import beastbooster.operators.MultiStepOperatorScheduleForSingleTree;
 import online.operators.AfterburnOperatorSchedule;
 import online.operators.ExchangeOnPartition;
@@ -223,10 +228,10 @@ public class PartitionMCMC extends MCMC {
 		
 		XMLProducer producer = new XMLProducer();
 		String xml = producer.toRawXML(mcmc);
-		xml = xml.replaceAll("'beast.core.MCMC'", "'online.PartitionMCMC'");
+		xml = xml.replaceAll("'beast.base.inference.MCMC'", "'online.PartitionMCMC'");
 
-        xml = xml.replaceAll("\\bbeast.evolution.likelihood.ThreadedTreeLikelihood\\b", "beastbooster.likelihood.DuckThreadedTreeLikelihood");
-        xml = xml.replaceAll("\\bbeast.evolution.likelihood.TreeLikelihood\\b", "beastbooster.likelihood.DuckTreeLikelihood");
+        xml = xml.replaceAll("\\bbeast.base.evolution.likelihood.ThreadedTreeLikelihood\\b", "beastbooster.likelihood.DuckThreadedTreeLikelihood");
+        xml = xml.replaceAll("\\bbeast.base.evolution.likelihood.TreeLikelihood\\b", "beastbooster.likelihood.DuckTreeLikelihood");
 		
 //		try {
 //				PrintStream out = new PrintStream(new File("/tmp/beast.xml"));

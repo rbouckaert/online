@@ -8,13 +8,13 @@ import java.util.List;
 
 import org.apache.commons.math3.stat.correlation.Covariance;
 
-import beast.app.util.Application;
-import beast.app.util.LogFile;
-import beast.core.Description;
-import beast.core.Input;
-import beast.core.util.Log;
-import beast.core.Runnable;
-import beast.util.LogAnalyser;
+import beastfx.app.tools.Application;
+import beastfx.app.util.LogFile;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.core.Log;
+import beast.base.inference.Runnable;
+import beastfx.app.tools.LogAnalyser;
 
 @Description("Various ways to compare two distributions")
 public class DistributionComparator extends Runnable {

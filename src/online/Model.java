@@ -3,12 +3,12 @@ package online;
 import java.util.ArrayList;
 import java.util.List;
 
-import beast.core.Distribution;
-import beast.core.MCMC;
-import beast.core.OperatorSchedule;
-import beast.core.State;
-import beast.core.parameter.Parameter;
-import beast.evolution.tree.Tree;
+import beast.base.inference.Distribution;
+import beast.base.inference.MCMC;
+import beast.base.inference.OperatorSchedule;
+import beast.base.inference.State;
+import beast.base.inference.parameter.Parameter;
+import beast.base.evolution.tree.Tree;
 
 /** container of bits relevant to updating the state of models **/
 public class Model {

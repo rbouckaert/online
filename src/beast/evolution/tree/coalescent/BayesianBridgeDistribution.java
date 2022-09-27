@@ -2,10 +2,10 @@ package beast.evolution.tree.coalescent;
 
 import org.apache.commons.math.distribution.Distribution;
 
-import beast.core.Description;
-import beast.core.Input;
-import beast.core.util.Log;
-import beast.math.distributions.ParametricDistribution;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.core.Log;
+import beast.base.inference.distribution.ParametricDistribution;
 
 @Description("Flexible, heavy-tailed, Bayesian bridge distribution")
 public class BayesianBridgeDistribution extends ParametricDistribution {

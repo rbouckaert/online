@@ -5,26 +5,26 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
 
-import beast.app.treeannotator.TreeAnnotator;
-import beast.app.treeannotator.TreeAnnotator.MemoryFriendlyTreeSet;
-import beast.app.util.Application;
-import beast.app.util.LogFile;
-import beast.app.util.OutFile;
-import beast.app.util.TreeFile;
-import beast.app.util.XMLFile;
-import beast.core.Description;
-import beast.core.Input;
-import beast.core.MCMC;
-import beast.core.Runnable;
-import beast.core.State;
-import beast.core.StateNode;
-import beast.core.parameter.BooleanParameter;
-import beast.core.parameter.IntegerParameter;
-import beast.core.parameter.RealParameter;
-import beast.core.util.Log;
-import beast.evolution.tree.Tree;
-import beast.util.LogAnalyser;
-import beast.util.XMLParser;
+import beastfx.app.treeannotator.TreeAnnotator;
+import beastfx.app.treeannotator.TreeAnnotator.MemoryFriendlyTreeSet;
+import beastfx.app.tools.Application;
+import beastfx.app.util.LogFile;
+import beastfx.app.util.OutFile;
+import beastfx.app.util.TreeFile;
+import beastfx.app.util.XMLFile;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.inference.MCMC;
+import beast.base.inference.Runnable;
+import beast.base.inference.State;
+import beast.base.inference.StateNode;
+import beast.base.inference.parameter.BooleanParameter;
+import beast.base.inference.parameter.IntegerParameter;
+import beast.base.inference.parameter.RealParameter;
+import beast.base.core.Log;
+import beast.base.evolution.tree.Tree;
+import beastfx.app.tools.LogAnalyser;
+import beast.base.parser.XMLParser;
 
 @Description("Convert tree and trace log into multi-state file that can be used with TraceExpander")
 public class Log2MultiState extends Runnable {
